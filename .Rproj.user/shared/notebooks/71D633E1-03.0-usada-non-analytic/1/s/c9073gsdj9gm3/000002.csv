@@ -1,0 +1,20 @@
+"0","UsadaSanctions <- readr::read_csv(usada_sanctions)"
+"0","UsadaSanctions %>% dplyr::glimpse(78)"
+"1","Rows: 595"
+"1",""
+"1","
+"
+"1","Columns: 7"
+"1",""
+"1","
+"
+"1","$ group              [3m[38;5;246m<dbl>[39m[23m 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, …
+$ athlete            [3m[38;5;246m<chr>[39m[23m ""werdum, fabricio"", ""jones, stirley"", ""hay, amy""…
+$ sport              [3m[38;5;246m<chr>[39m[23m ""mixed martial arts"", ""paralympic track and fiel…
+$ sanction_terms     [3m[38;5;246m<chr>[39m[23m ""2-year suspension - sanction reduced"", ""4-year …
+$ substance_reason   [3m[38;5;246m<chr>[39m[23m ""trenbolone"", ""stanozolol"", ""ostarine"", ""lgd-403…
+$ sanction_announced [3m[38;5;246m<chr>[39m[23m ""original 09/11/2018; updated 01/16/2020"", ""orig…
+$ sanction_dates     [3m[38;5;246m<date>[39m[23m 2020-01-16, 2019-12-16, 2019-12-16, 2019-09-10,…"
+"1",""
+"1","
+"

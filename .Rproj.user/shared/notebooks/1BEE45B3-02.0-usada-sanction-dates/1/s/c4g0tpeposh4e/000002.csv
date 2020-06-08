@@ -1,0 +1,19 @@
+"0","# lowercase text -----"
+"0","Usada <- purrr::map_df(.x = Usada, .f = stringr::str_to_lower)"
+"0","Usada %>% dplyr::glimpse(78)"
+"1","Rows: 763"
+"1",""
+"1","
+"
+"1","Columns: 5"
+"1",""
+"1","
+"
+"1","$ athlete            [3m[38;5;246m<chr>[39m[23m ""walsh, cole"", ""romero noboa, isidro"", ""gastelum…
+$ sport              [3m[38;5;246m<chr>[39m[23m ""track and field"", ""triathlon"", ""mixed martial a…
+$ substance_reason   [3m[38;5;246m<chr>[39m[23m ""cannabinoids"", ""androgenic anabolic steroid; ca…
+$ sanction_terms     [3m[38;5;246m<chr>[39m[23m ""6-month suspension with 3-month deferral; loss …
+$ sanction_announced [3m[38;5;246m<chr>[39m[23m ""06/01/2020"", ""05/22/2020"", ""05/11/2020"", ""05/04…"
+"1",""
+"1","
+"

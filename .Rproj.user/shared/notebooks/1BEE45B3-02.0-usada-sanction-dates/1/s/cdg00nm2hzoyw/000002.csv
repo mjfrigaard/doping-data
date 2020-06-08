@@ -1,0 +1,7 @@
+"0","UsadaNames %>%"
+"0","    # order by sanction_announced"
+"0","        dplyr::arrange(desc(sanction_announced)) %>% "
+"0","    # reorganize columns"
+"0","        dplyr::select(athlete, "
+"0","                  sanction_announced,"
+"0","                  dplyr::everything())"

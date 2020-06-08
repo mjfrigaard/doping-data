@@ -1,0 +1,3 @@
+"0","stringr::str_view_all(string = substances, "
+"0","                      pattern = non_drug_sanctions_regex, "
+"0","                      match = TRUE)"

@@ -1,0 +1,10 @@
+"0","UsadaRaw <- readr::read_csv(file = raw_data_csv_path)"
+"2","Parsed with column specification:
+cols(
+  Athlete = [31mcol_character()[39m,
+  Sport = [31mcol_character()[39m,
+  `Substance/Reason` = [31mcol_character()[39m,
+  `Sanction Terms` = [31mcol_character()[39m,
+  `Sanction Announced` = [31mcol_character()[39m
+)
+"

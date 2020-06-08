@@ -1,0 +1,377 @@
+---
+title: "Part 02.0: United States Anti-Doping Agency Sanction Data - Wrangle Sanction Dates"
+author: "Martin Frigaard"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+# create figs folder ----
+if (!file.exists("figs/")) {
+    dir.create("figs/")
+}
+# create data folder ----
+if (!file.exists("data/")) {
+    dir.create("data/")
+}
+# create docs folder ----
+if (!file.exists("docs/")) {
+    dir.create("docs/")
+}
+library(knitr)
+library(rmdformats)
+library(tidyverse)
+library(devtools)
+library(hrbrthemes)
+# chunks set options
+knitr::opts_chunk$set(
+  echo = TRUE, # show/hide all code
+  tidy = FALSE, # cleaner code printing
+  comment = "#> ", # better console printing
+  eval = TRUE, # turn this to FALSE stop code chunks from running
+  message = TRUE, # show messages
+  warning = TRUE, # show warnings
+  size = "small", # size of the text
+  fig.path = "figs/", # location of files
+  fig.height = 5.5, # height of figures
+  fig.width = 8 # width of figures
+) # width of figures
+# knit set options
+knitr::opts_knit$set(
+  width = 78,
+  progress = FALSE
+)
+# base options
+base::options(
+  tibble.print_max = 25,
+  tibble.width = 78,
+   max.print = 999999,
+  scipen = 100000000
+)
+```
+
+> See my previous [script](https://github.com/mjfrigaard/dope-data/blob/master/code/01.0-scrape-usada.R) on scraping the USADA website. That document covers scraping an html table in and converting it to a data.frame in R, then exporting the data as a .csv file. 
+ 
+```{r 01-scrape-usada.R, message=FALSE, warning=FALSE}
+# fs::dir_ls("code")
+source("code/01.0-scrape-usada.R")
+```
+ 
+ 
+# Motivation (wrangling outline)
+
+I’ve found it’s a good habit to outline my data wrangling strategy *before* diving in and getting started. The `tidyverse` has almost made data manipulation processes in R *too* enjoyable, because sometimes I'll jump in and start trying to solve a problem, then come back and realize there was a simpler solution.
+
+So to start I will locate my files, outline a rough data wrangling plan based on what I currently know about these data, then get to work.
+
+## Where is my stuff?
+
+This post is a continuation of a previous tutorial, so I need to locate those files. The [`here`](https://github.com/jennybc/here_here) and [`fs`](https://github.com/r-lib/fs) packages are incredibly helpful for managing your project files. 
+
+```{r here-package, results='hide', eval=FALSE}
+library(here)
+library(fs)
+```
+
+`here` give me some useful feedback about how it works right from the start. See the message below:
+
+`here() starts at /Users/me/the/path/to/your/project/doping-data/`.
+
+But why? How does it know? I can figure this out with `here::dr_here()`
+
+```{r dr_here, results='hide', eval=FALSE}
+here::dr_here()
+```
+
+I can use the `fs::dir_info()` to find the latest data set in the `data/raw` folder. The data folder structure is below. 
+
+
+```{r data-tree}
+recent_raw_data_file_path <- fs::dir_info("data/raw") %>% 
+  dplyr::select(path, birth_time) %>% 
+  dplyr::arrange(desc(birth_time)) %>% 
+  dplyr::slice(1) %>% 
+  dplyr::select(path) %>% 
+  as_vector()
+recent_raw_data_file_path
+```
+
+I'll take the most recent file (`r print(recent_raw_data_file_path)`) using `here::here()` and `fs::dir_info()`, then I will assign this to `recent_raw_data_file_path`. If you are curious how `lubridate::today()` works, see below.
+
+```{r today}
+today <- lubridate::today()
+today
+```
+
+I can `paste0()` this `today` vector to the `recent_raw_data_file_path` object and create a complete file path with `here::here()`. 
+
+```{r raw_data_csv_path}
+raw_data_csv_path <- here::here(recent_raw_data_file_path, 
+                                base::paste0("UsadaRaw-", today,".csv"))
+raw_data_csv_path
+```
+
+
+By storing `recent_raw_data_file_path` and `raw_data_csv_path` in vectors this way, the workflow will always return the most recent data set.
+
+## Import the .csv file
+
+Now I can import the `UsadaRaw` .csv file with the `raw_data_csv_path` object. 
+
+```{r import-raw_file_path}
+UsadaRaw <- readr::read_csv(file = raw_data_csv_path)
+```
+
+## Style guides
+
+I follow the Style Guide from [Advanced R](http://adv-r.had.co.nz/Style.html) for naming objects in R. Other options exist, but I suggest setting up some naming rules to help you stay organized. I prefer the Advanced R Style Guide because the naming convention separates objects by class: 
+
+* `DataFrames` (like `UsadaRaw`)
+* `vector_names` (like `raw_data_path`, but this also extends to the columns/variables inside data frames) 
+* `myFunctions()` (like `csv_Outfile()`) 
+
+
+I'll take a quick look at the imported data frame with `dplyr`'s `glimpse()` function. 
+
+```{r glimpse-UsadaRaw}
+UsadaRaw %>% dplyr::glimpse(78)
+```
+
+## Wrangle the data frame
+
+If possible, I try to think of any changes I can apply across an entire data frame before changes to individual variables or values. For example, the column names in the `UsadaRaw` data frame contain some unruly characters (white spaces, forward slash, etc,), so I know I will need to clean these up (see `janitor::clean_names()`). 
+
+I can also see the text characters in the data frame have a combination of upper and lowercase characters. This will cause some additional headache when I start using regular expression patterns, so I'll convert these to lowercase (with a combination of `purrr::map_df()` and `stringr::str_to_lower()`).
+
+### Cleaning the variable names
+
+The `clean_names()` function from the [`janitor`](https://cran.r-project.org/web/packages/janitor/vignettes/janitor.html) package lets me quickly format all of the column names in the `UsadaRaw` data frame. This function has a `case` argument that allows me to select how I want to format the column names. 
+
+```{r clean-names, message=FALSE, warning=FALSE}
+library(janitor)
+Usada <- UsadaRaw %>% 
+    janitor::clean_names(dat = ., 
+                         case = "snake")
+Usada %>% glimpse(78)
+```
+
+### Use iteration (wherever possible)
+
+The [`purrr`](https://purrr.tidyverse.org/) package is excellent for iteration and functional programming. Both of these topics are too large to cover in this post, but I will demonstrate an example with the `purrr::map_df()` function:
+
+`purrr::map_df()` takes a data frame (`.x`) and in input, and applies a function (`.f`) across it.
+
+```{r map_df}
+# lowercase text -----
+Usada <- purrr::map_df(.x = Usada, .f = stringr::str_to_lower)
+Usada %>% dplyr::glimpse(78)
+```
+
+Great. Now I will move onto formatting/wrangling the individual columns.
+
+## Wrangle the variables
+
+There are some useful bits of information on the data we extracted from the USADA website. Have you ever heard anyone say, "the Devil is in the details?" Well, the details are in the documentation.
+
+> Below is a listing of athletes that have received a sanction for a doping violation under the athlete’s international federation rules and/or the USOC Anti-Doping Policies. The Release Date listed in the table corresponds to the date the sanction was publicly announced. For more information about a specific sanction please reference the official press release announcing the anti-doping rule violation. Please visit the news section [here](https://www.usada.org/news/) or use the site’s search area. You can narrow the list by keyword (sport, name, substance, etc.) using the search box below.
+
+> \*Athlete names are removed from this database each January if the athlete’s sanction(s) ended 10 years prior. While the name is removed, all other sanction data remains in the Sanction List to ensure the integrity of the database.
+
+### Removing the missing names
+
+I'll go head and separate the missing names from the rest of the sanction data and store it in the `UsadaNoNames` data frame. 
+
+```{r UsadaNoNames}
+# create no name sanctions
+UsadaNoNames <- Usada %>% 
+    dplyr::filter(athlete == "*name removed")
+# create named sanctions
+UsadaNames <- Usada %>% 
+    dplyr::filter(athlete != "*name removed")
+UsadaNoNames %>% dplyr::glimpse(78)
+UsadaNames %>% dplyr::glimpse(78)
+```
+
+I will come back to the `UsadaNoNames` data frame after wrangling the sanction data with athlete names. 
+
+### Format the sanction dates
+
+My `UsadaNames` data frame has a single date column (`sanction_announced`), but it's currently formatted as a character (`<chr>`). To change this into a date format, I'll get help from `dplyr::mutate()` and  `lubridate::mdy()`. I like to use the `%>%` operator to test wrangling operations before assigning them to a data frame. 
+
+```{r sanction_date}
+# format sanction announced date ------
+# test
+UsadaNames %>% 
+    dplyr::mutate(sanction_date = lubridate::mdy(sanction_announced))
+```
+
+Yikes! This shows that `22` dates `failed to parse`. I'll investigate these values before assigning them to a new variable. 
+
+I can use the `dplyr::arrange()` function to figure out what is going on with these dates. 
+
+```{r arrange-sanctions}
+UsadaNames %>%
+    # order by sanction_announced
+        dplyr::arrange(desc(sanction_announced)) %>% 
+    # reorganize columns
+        dplyr::select(athlete, 
+                  sanction_announced,
+                  dplyr::everything())
+```
+
+
+It looks like some of the dates have and `original` and `upated` sanction date. These will have to be separated and reorganized into a single column. 
+
+### Problem dates (two variables in one column)
+
+The table output in the Rmarkdown file shows me what happened in at least two of the dates that failed to parse.
+
+```{r failed-to-parse, echo=FALSE}
+# fs::dir_ls("images")
+knitr::include_graphics(path = "figs/failed-to-parse.png")
+```
+
+I want to separate these troubling dates from the other data, fix them, then bind them back to the `UsadaNames` data. 
+
+```{r UsadaBadDates}
+UsadaBadDates <- UsadaNames %>%
+    dplyr::filter(stringr::str_detect(string = sanction_announced,
+                                      pattern = "original")) %>% 
+    dplyr::select(athlete, 
+                  sanction_announced,
+                  dplyr::everything())
+UsadaBadDates
+```
+
+In these 22 cases, the variable actually lists two dates: `original: 05/10/2017` and `;updated: 11/27/2018`. Now I'll assume all the dates in the `UsadaNames` are `original`, and the `updated` date is the only data I need from the `UsadaBadDates` (*at least for right now*).
+
+### Plan a solution 
+
+I'm now in a situation where I have to distinguish between an `original` and `updated` sanction announced date. There are multiple ways to attack this problem. I tend to favor solutions that balance relatively clear code with minimal steps. I'll apply [Polya's problem solving steps](https://math.berkeley.edu/~gmelvin/polya.pdf) to figuring out what to do in this situation.
+
+1. Define the problem: *The data have two dates (`original` and `updated`) in a single column (`sanction_announced`)*
+
+2. Devise a plan: 
+
+   - *I'll use the `stringr` package to split the bad dates on the `"updated"` pattern,*  
+  
+   - *then I'll use `tidyr::unnest()` function to turn the vectors into multiple rows,*  
+  
+   - *use `dplyr::filter()` to remove the "original" dates,*  
+  
+   - *finally, I'll use `dplyr::mutate()` again with stringr::str_remove_all()` to format the new `sanction_date` column*
+
+3. Carry out the plan: *I execute all the steps outlined above in the code chunk below (with details in the comments)*
+
+```{r str-split-unnest}
+UsadaBadDates %>%
+        dplyr::mutate(sanction_dates = 
+    # 1) split this on the "updated" pattern
+             stringr::str_split(string = sanction_announced, 
+                                pattern = "updated")) %>% 
+    # convert the output from split into multiple rows
+        tidyr::unnest(sanction_dates) %>% 
+    # check this to see what is happening 
+    dplyr::select(athlete, sanction_announced, sanction_dates)
+```
+
+We can see all of the `updated` dates are on a new line, and the `original` dates still contain the text. Now I can filter out the rows with an `original` date (because I am only interested in the `updated` dates for now). 
+
+```{r filter-out-original-dates}
+UsadaBadDates %>%
+        dplyr::mutate(sanction_dates = 
+    # 1) split this on the "updated" pattern
+             stringr::str_split(string = sanction_announced, 
+                                pattern = "updated")) %>% 
+    # 2) convert the output from split into multiple rows
+        tidyr::unnest(sanction_dates) %>%  
+    # 3) remove the "original" dates 
+        dplyr::filter(!str_detect(string = sanction_dates, 
+                                  pattern = "original")) %>% 
+      # 4) check this to see what is happening 
+    dplyr::select(athlete, sanction_announced, sanction_dates)
+```
+
+We still need to remove all of the colons and any white-space from the dates in `sanction_date`.
+
+```{r clean-bad-dates, message=FALSE, warning=FALSE}
+(UsadaFixedDates <- UsadaBadDates %>%
+        dplyr::mutate(sanction_dates = 
+    # 1) split this on the "updated" pattern
+             stringr::str_split(string = sanction_announced, 
+                                pattern = "updated")) %>% 
+    # 2) convert the output from split into multiple rows
+        tidyr::unnest(sanction_dates) %>%  
+    # 3) remove the "original" dates 
+        dplyr::filter(!str_detect(string = sanction_dates, 
+                                  pattern = "original")) %>% 
+    # 4) remove the colon from sanction_dates
+        dplyr::mutate(sanction_dates = stringr::str_remove_all(
+                                                      string = sanction_dates,
+                                                      pattern = ":"),
+                      # 5) remove any whitespace
+                      sanction_dates = stringr::str_trim(sanction_dates),
+                      # 6) format as date
+                      sanction_dates = lubridate::mdy(sanction_dates)) %>% 
+    # 7) reorganize the variables 
+        dplyr::select(athlete,
+                      sport,
+                      sanction_terms,
+                      substance_reason,
+                      dplyr::everything()))
+```
+
+
+Now I can filter out the rows with the bad dates from `UsadaNames`, remove the `old_date` column from `UsadaBadDates` and bind these two data frames together into a new `UsadaNames` data frame. I add a `group` variable to serve as an `.id` so I can verify the data have been combined correctly. 
+
+```{r UsadaNamesGoodDates}
+# remove bad dates from original data 
+UsadaNamesGoodDates <- UsadaNames %>% 
+    dplyr::filter(!stringr::str_detect(string = sanction_announced,
+                                      pattern = "original"))
+# bind these together 
+UsadaSanctions <- UsadaFixedDates %>% 
+    dplyr::bind_rows(., UsadaNamesGoodDates, 
+                     .id = "group")
+UsadaSanctions %>% dplyr::glimpse(78)
+```
+
+### Check the solution
+
+This is where I can check to see if the 22 dates have been added back to the data set. 
+
+```{r check-bind}
+# check bind
+UsadaSanctions %>% dplyr::count(group)
+```
+
+The `22` in group `1` reassure me that the `22` dates have been correctly added back to the data set. And now that I have a wrangled data frame, I can start exploring the variables in the next section. 
+
+## Export these data
+
+Now I can export these data frames to the `data/processed` folder. 
+
+```{r export-wrangle, eval=TRUE}
+# create data folder ----
+if (!file.exists("data/processed")) {
+    dir.create("data/processed")
+}
+# export UsadaSanctions
+readr::write_csv(as.data.frame(UsadaSanctions), 
+                 path = base::paste0("data/processed/", 
+                           base::noquote(lubridate::today()),
+                           "-03.0-UsadaSanctions.csv"))
+# export UsadaSanctions
+readr::write_csv(as.data.frame(UsadaSanctions), 
+                 path = base::paste0("data/processed/", 
+                           base::noquote(lubridate::today()),
+                           "-03.0-UsadaNoNames.csv"))
+
+# export the entire image
+base::save.image(file = paste0("data/processed/",
+                               base::noquote(lubridate::today()), 
+                               "-03.0-usada-sanction-dates.RData"))
+
+fs::dir_tree("data/processed", 
+             regexp = base::noquote(lubridate::today()))
+```

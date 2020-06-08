@@ -1,0 +1,7 @@
+"0","UsadaBadDates <- UsadaNames %>%"
+"0","    dplyr::filter(stringr::str_detect(string = sanction_announced,"
+"0","                                      pattern = ""original"")) %>% "
+"0","    dplyr::select(athlete, "
+"0","                  sanction_announced,"
+"0","                  dplyr::everything())"
+"0","UsadaBadDates"

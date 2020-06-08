@@ -1,0 +1,4 @@
+"0","USADA_url <- ""https://www.usada.org/testing/results/sanctions/"""
+"0","USADA_extraction <- USADA_url %>%"
+"0","     read_html() %>%"
+"0","     html_nodes(""table"")"

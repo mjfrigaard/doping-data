@@ -1,0 +1,18 @@
+"0","UsadaRaw <- rvest::html_table(USADA_extraction[[1]])"
+"0","UsadaRaw %>% dplyr::glimpse(70)"
+"1","Rows: 763"
+"1",""
+"1","
+"
+"1","Columns: 5"
+"1",""
+"1","
+"
+"1","$ Athlete              [3m[38;5;246m<chr>[39m[23m ""Walsh, Cole"", ""Romero Noboa, Isidro"",…
+$ Sport                [3m[38;5;246m<chr>[39m[23m ""Track and Field"", ""Triathlon"", ""Mixed…
+$ `Substance/Reason`   [3m[38;5;246m<chr>[39m[23m ""Cannabinoids"", ""Androgenic Anabolic S…
+$ `Sanction Terms`     [3m[38;5;246m<chr>[39m[23m ""6-Month Suspension with 3-Month Defer…
+$ `Sanction Announced` [3m[38;5;246m<chr>[39m[23m ""06/01/2020"", ""05/22/2020"", ""05/11/202…"
+"1",""
+"1","
+"
