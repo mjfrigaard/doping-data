@@ -1,0 +1,233 @@
+---
+title: "(Part 2.4) United States Anti-Doping Agency Sanction Data - M1 Manipulation of blood and blood components"
+author: "Martin Frigaard"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(hrbrthemes)
+library(extrafont)
+library(knitr)
+library(rmdformats)
+library(knitr)
+library(blogdown)
+library(markdowntemplates)
+library(tidyverse)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  cache = FALSE,
+  prompt = FALSE,
+  tidy = FALSE,
+  fig.width = 10,
+  fig.height = 7,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE,
+  fig.path = "figs/"
+)
+# set theme
+ggplot2::theme_set(theme_ipsum_tw(
+  base_size = 6,
+  strip_text_size = 9,
+  axis_title_size = 11,
+  plot_title_size = 17,
+  subtitle_size = 13,
+  base_family = "Ubuntu",
+  strip_text_family = "TitilliumWeb-Regular",
+  axis_title_family = "TitilliumWeb-Regular",
+  subtitle_family = "TitilliumWeb-Regular",
+  plot_title_family = "JosefinSans-Regular"
+))
+```
+
+**Packages**
+
+```{r packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(magrittr)
+library(skimr)
+library(rlang)
+library(gt)
+library(visdat)
+library(inspectdf)
+library(foreign)
+library(naniar)
+```
+
+# Motivation 
+
+In these scripts (`04`), we will be wrangling the substances from the USADA website. 
+
+## Import data 
+
+In the previous post, I wrangled the data into a new data structure that looks different from the original data on the [USADA website](https://www.usada.org/testing/results/sanctions/). These data are located in the `data/proessed` folder. I can use the `fs::dir_ls()` functions `regexp` argument to find the most recent files. 
+
+```{r usada_sanct_csv_data}
+# check
+ProcessedData <- fs::dir_ls("data/processed", 
+      regexp = base::noquote(lubridate::today())) %>% 
+      tibble::enframe()
+ProcessedData
+```
+
+Here we can import the latest sanctions data set. 
+
+```{r import-processed_data}
+# choose the csv
+usada_sanct_csv_data <- ProcessedData %>% 
+    dplyr::filter(stringr::str_detect(string = value, 
+          pattern = "UsadaSanctions")) %>% 
+    as_vector() %>% 
+    base::unname()
+
+# choose the RData
+usada_beta_2_agonists_rdata <- ProcessedData %>% 
+    dplyr::filter(stringr::str_detect(string = value, 
+          pattern = "usada-S3-beta-2-agonists")) %>% 
+    as_vector() %>% 
+    base::unname()
+# writeLines(usada_beta_2_agonists_rdata)
+
+# import UsadaSanctions
+UsadaSanctions <- readr::read_csv(file = usada_sanct_csv_data)
+
+# import 02.3-usada-S3-beta-2-agonists.RData
+base::load(usada_beta_2_agonists_rdata[1])
+
+ls()
+```
+
+Below is the `UsadaSanctions` data frame. This data set has the original dimensions (5 columns, 571 observations). 
+
+```{r UsadaSanctions}
+UsadaSanctions %>% dplyr::glimpse(78)
+```
+
+
+## Prohibited Methods:
+
+### * M1 Manipulation of blood and blood components
+
+These methods are employed to improve oxygen transfer through the bloodstream. They include adding more red blood cells to the body by reintroduction any quantity of blood, or taking chemicals to artificially improve the uptake/transport/delivery of oxygen to the bloodstream (like [efaproxiral](https://en.wikipedia.org/wiki/Efaproxiral)). 
+
+
+```{r blood_dope_epo}
+blood_dope_epo <- c(
+  "blood doping",
+  "epo",
+  "epo, hgh, cortisone",
+  "epo, hgh, testosterone",
+  "epo, hgh, testosterone, blood transfusions",
+  "epo, hgh, testosterone, cortisone",
+  "epo, hgh, testosterone, cortisone, blood transfusions",
+  "epo, testosterone, blood transfusions",
+  "epo, the testosterone/epitestosterone cream, and thg",
+  "erythropoiesis-stimulating agent",
+  "erythropoietin (epo)",
+  "erythropoietin (epo), human growth hormone (hgh), and testosterone",
+  "efaproxiral",
+  "human recombinant erythropoietin",
+  "recombinant human erythropoietin (repo)",
+  "use and possession of epo & evading sample collection",
+  "use, attempted use and possession of epo",
+  "oxygen-enhancing peptide hormone",
+  "r-epo"
+)
+
+blood_dope_epo_regex <- paste0("(", stringr::str_c(blood_dope_epo, 
+                                                    collapse = "|"), ")")
+```
+
+Check with the regex.
+
+```{r str_view_all-blood_dope_epo_regex}
+stringr::str_view_all(string = substances, 
+                      pattern = blood_dope_epo_regex, 
+                      match = TRUE)
+```
+
+Assign `blood_dope_epo_regex` to the `UsadaM1BloodManip`.
+
+```{r M1_agents}
+UsadaM1BloodManip <- UsadaSanctions %>%
+  dplyr::mutate(
+    wada_cat =
+      case_when(
+          
+        # non-analytic first
+        stringr::str_detect(string = substance_reason, 
+                       pattern = non_drug_sanctions_regex) ~ "non-analytic",
+        # M1 2nd 
+        stringr::str_detect(string = substance_reason, 
+        pattern = blood_dope_epo_regex) ~ "M1 Manipulation of blood & blood components",  
+        
+        # S3 Beta-2 agonists 3rd 
+        stringr::str_detect(string = substance_reason, 
+                          pattern = beta_blockers_regex) ~ "S3 Beta-2 agonists",
+        
+        # S1 Anabolic Agents 4th 
+        stringr::str_detect(string = substance_reason, 
+                        pattern = anabolic_agents_regex) ~ "S1 Anabolic Agents",
+        
+        TRUE ~ NA_character_))
+
+UsadaM1BloodManip %>% count(wada_cat)
+```
+
+We will check these 14 M1 Manipulation of blood & blood components in the visualization below.
+
+```{r ggp_m1_blood_manip_top5-top-5}
+ggp_m1_blood_manip_top5 <- UsadaM1BloodManip %>%
+    dplyr::filter(wada_cat == "M1 Manipulation of blood & blood components") %>% 
+    dplyr::count(substance_reason, sort = TRUE) %>% 
+    dplyr::mutate(substance_reason = reorder(substance_reason, n),
+                  blood_dope_epo_count = n) %>% 
+    dplyr::filter(stringr::str_detect(
+                    string = substance_reason, 
+                    pattern = blood_dope_epo_regex)) %>% 
+    ggplot2::ggplot(aes(substance_reason, blood_dope_epo_count)) + 
+    ggplot2::geom_col() + 
+    ggplot2::labs(x = NULL, 
+              y = "M1 Manipulation of blood count",
+          title = "M1 Manipulation of blood Sanctions") + 
+    ggplot2::coord_flip()
+ggp_m1_blood_manip_top5
+```
+
+Now we will check the four categories in the `wada_cat` variable. 
+
+```{r ggp_blood_manip_cat}
+ggp_blood_manip_cat <- UsadaM1BloodManip %>% 
+    dplyr::count(substance_reason, wada_cat, sort = TRUE) %>% 
+    dplyr::ungroup() %>% 
+    dplyr::group_by(wada_cat) %>% 
+    dplyr::top_n(10) %>%
+    dplyr::ungroup() %>% 
+    dplyr::mutate(substance_reason = reorder(substance_reason, n)) %>% 
+    ggplot2::ggplot(aes(substance_reason, n, fill = wada_cat)) + 
+    ggplot2::geom_col(show.legend = FALSE) + 
+    ggplot2::facet_wrap(~wada_cat, 
+                 scales = "free_y", 
+                 ncol = 1) + 
+    ggplot2::labs(y = "Number of sanctions/substances", 
+                  x = NULL, 
+                  title = "WADA list categories for banned substances",
+                  subtitle = "Top ten substances/reason in each category") + 
+    ggplot2::coord_flip()
+ggp_blood_manip_cat
+```
+
+We can see the `M1 Manipulation of blood & blood components` are labeled, and the most common substance is the `epo`. We can also see there are quite a few substances listed in the other top M1 categories. 
+
+## Export data 
+
+We'll export this image and move onto S6 Stimulants.
+
+```{r processed-data}
+base::save.image(file = paste0("data/processed/",
+                               base::noquote(lubridate::today()), 
+                               "-02.4-usada-M1-blood-manip.RData"))
+fs::dir_tree(path = "data/processed", 
+           regexp = base::noquote(lubridate::today()))
+```

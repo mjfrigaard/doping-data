@@ -1,0 +1,289 @@
+---
+title: "Part 03: United States Anti-Doping Agency (USADA) Sanction Data - Counting data"
+author: "Martin Frigaard"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+# create figs folder ----
+if (!file.exists("figs/")) {
+    dir.create("figs/")
+}
+# create data folder ----
+if (!file.exists("data/")) {
+    dir.create("data/")
+}
+# create docs folder ----
+if (!file.exists("docs/")) {
+    dir.create("docs/")
+}
+library(knitr)
+library(rmdformats)
+library(tidyverse)
+library(devtools)
+library(hrbrthemes)
+# chunks set options
+knitr::opts_chunk$set(
+  echo = TRUE, # show/hide all code
+  # results = "hide", # hide results
+  tidy = FALSE, # cleaner code printing
+  comment = "#> ", # better console printing
+  eval = TRUE, # turn this to FALSE stop code chunks from running
+  message = TRUE, # show messages
+  warning = TRUE, # show warnings
+  size = "small", # size of the text
+  fig.path = "figs/", # location of files
+  fig.height = 5.5, # height of figures
+  fig.width = 8 # width of figures
+) # width of figures
+# knit set options
+knitr::opts_knit$set(
+  width = 78,
+  progress = FALSE
+)
+# base options
+base::options(
+  tibble.print_max = 25,
+  tibble.width = 78,
+   max.print = 999999,
+  scipen = 100000000
+)
+```
+
+# Motivation
+
+In the last two tutorials I extracted and wrangled a data set of USADA sanctions (see [here]() and [here]()). In this section I'm going to start exploring the substances that are listed as the cause of the sanctions. 
+
+## Scrape data 
+
+These end up in the `raw` folder.
+
+```{r 01-scrape-usada.R, message=FALSE, warning=FALSE}
+# fs::dir_ls(".")
+source("code/01-scrape-usada.R")
+```
+
+## Wrangle data 
+
+These data end up in the `processed` folder.
+
+```{r 01-scrape-usada.R, message=FALSE, warning=FALSE}
+# fs::dir_ls(".")
+source("code/02-wrangle-usada-variables.R")
+```
+
+
+## Import data
+
+The data sets from the last section are in the `WrangledData` 
+
+```{r wrangled_dat_paths}
+wrangled_data_paths <- WrangledData %>% 
+    dplyr::filter(stringr::str_detect(string = ., pattern = 
+                                      as.character(lubridate::today()))) %>%
+    as_vector()
+wrangled_data_paths[1]
+wrangled_data_paths[2]
+```
+
+
+```{r import-data}
+# fs::dir_ls("data")
+UsadaNoNames <- readr::read_csv(wrangled_data_paths[1])
+UsadaSanct <- readr::read_csv(wrangled_data_paths[2])
+```
+
+Export the substances.
+
+```{r Substances, include=FALSE, eval=FALSE}
+Substances <- UsadaSanct %>% 
+    dplyr::arrange(desc(substance_reason)) %>% 
+    dplyr::distinct(substance_reason)
+readr::write_csv(as.data.frame(Substances), 
+                 path = base::paste0("data/processed/", 
+                base::noquote(lubridate::today()),
+                "-Substances.csv"))
+```
+
+```{r UsadaNoNames}
+UsadaNoNames %>%
+  dplyr::glimpse(78)
+```
+
+```{r UsadaSanct}
+UsadaSanct %>%
+  dplyr::glimpse(78)
+```
+
+## Data Science == counting things 
+
+These data are mostly categorical, so summarizing them mean doing a lot of counting. If I start with the `sport` variable, I can see how many different competitive events are monitored/sanctioned by the USADA.
+
+```{r count-sports}
+UsadaSanct %>% 
+    dplyr::count(sport, sort = TRUE)
+```
+
+
+For example, the `substance_reason` variable has all of the reasons each athelete was sanctioned by USADA. 
+
+```{r count-substances}
+UsadaSanct %>%
+  dplyr::count(substance_reason, sort = TRUE) %>%
+  utils::head(10)
+```
+
+This shows me that quite a few of these substances can be condensed into a smaller set of categories. Fortunately, I've created another data set with the WADA banned substance categories. I can join this to the `UsadaSanct` on `substance_reason`.
+
+```{r SubstancesWadaList-UsadaSanctWada}
+# fs::dir_ls("data/processed")
+SubstancesWadaList <- readr::read_csv("data/processed/2019-03-06-Substances-WADA-list.csv")
+UsadaSanctWada <- UsadaSanct %>% 
+    dplyr::inner_join(x = ., y = SubstancesWadaList, by = "substance_reason")
+```
+
+
+```{r UsadaSanctWada}
+UsadaSanctWada %>% dplyr::glimpse(78)
+```
+
+
+Before we start visualizing, I'll give an overview of the USADA banned substances.
+
+### The World Anti-Doping Agency’s (WADA) Prohibited List
+
+USADA follows the list of prohibited substances published by the The World Anti-Doping Agency (WADA). The first list of prohibited substances was printed by the International Olympic Committee (IOC) in 1967. In the 1972 Munich Games, athletic testing was introduced. The current list of banned substances can be found on [WADA's website](https://www.usada.org/substances/prohibited-list/). A substance ends up banned when it meets two out of three of the following criteria:
+
+1. It has the potential to enhance sport performance      
+2. It represents an actual or potential health risk to the athlete     
+3. It violates the spirit of sport   
+
+The categories for prohibited substances include the following:
+
+### * S0 (Non-approved substances)
+
+This a blanket, catch-all for substances I would consider "obviously prohibited". 
+
+"*any pharmacological substance which is not addressed by any of the subsequent sections of the list and with no current approval by any governmental regulatory health authority for human therapeutic use (e.g. drugs under pre-clinical or clinical development or discontinued, designer drugs, substances approved only for veterinary use) is prohibited at all times.*"
+
+### * S1 Anabolic agents
+
+These are typically what people think of when they hear the word, "steroids." **Anabolic agents** (and their synthetic derivatives)  typically refer to [testosterone](https://en.wikipedia.org/wiki/Testosterone), a sex hormone produced by our body under normal conditions (although in slightly higher concentrations in males compared to females). 
+
+Hormones are made, stored, and released by our endocrine glands. They work like chemical messengers, communicating important information to various body systems. This includes messages like building up ("anabolic") or breaking down ("catabolic") muscle cells and tissue. Testosterone and it's precursors are the most commonly used anabolic agents because of their role in building and maintaining skeletal muscle tissue.   
+
+Perhaps the most famous example of anabolic steroid use was by sprinter [Ben Johnson](https://www.theguardian.com/australia-news/2017/jun/06/sportsbets-ben-johnson-ad-banned-for-making-light-of-drug-use) and the other athletes in the [1988 Summer Olympics](https://en.wikipedia.org/wiki/Athletics_at_the_1988_Summer_Olympics_%E2%80%93_Men%27s_100_metres). Johnson took [Stanozolol](https://en.wikipedia.org/wiki/Stanozolol), an anabolic agent popular among sprinters because of it's ability to gain lean muscle mass.  
+
+**Steroid Cycles:** Generally speaking, anabolic agents are used in the pre-competition or "building" phase to enhance an athlete's training, with a focus on developing size, power, or strength. Starting and stopping steroids use throughout a competitive season is referred to as "cycling" (or a "cycle"). The duration of cycles vary, but generally don't exceed 8 weeks. Sports and athletic events in which size or strength contribute to performance have a potential market for anabolic agents. In fact, coaches and athletes use various resistance training programs and diets to try and stimulate these processes throughout an athletic career. 
+
+### * S2 Peptide hormones, growth factors, related substances, and mimetics
+
+**What causes muscle growth?** 
+
+Training causes tiny tears and injuries to muscle tissues. These tiny injuries initiate a cascade of chemical messages that fills the muscle cells with more contractile proteins (actin and myosin). Collectively, this process is referred to as [hypertrophy](https://en.wikipedia.org/wiki/Hypertrophy). It results in an increase in muscle size and protein content, but it does not typically result in the production of more muscle cells. [Hyperplasia](https://en.wikipedia.org/wiki/Hyperplasia) is the creation of new muscle cells, and its still unclear if prolonged resistance training can stimulate this response.  
+
+We've established earlier that hormones carry specific chemical messages to various cells throughout the body. Specific messages are intended for specific hormone receptors, like a key made to fit in a lock. These receptors vary by location (the cell membrane vs. inside the cell) and type (peptide vs. steroid hormone receptors). Increasing the amount of anabolic hormone messages can stimulate muscle growth, but so can increasing the number of receptors for that hormone. For example, if I flood my bloodstream with testosterone, and very few receptors are around to hear that "build muscle" message (and communicate it to my muscle tissue cells), nothing would change. However, if I increased the rate this specific signal was heard by increasing the number of receptors, I could indirectly boost the strength of that chemical message. 
+
+Peptide hormones are also produced by the endocrine system and used by athletes to stimulate muscle growth and gains in strength, speed, or power.
+
+[Insulin](https://en.wikipedia.org/wiki/Insulin), a peptide hormone, is often used in combination with testosterone. Insulin sends a chemical signal that stimulates the absorption of nutrients into the muscle cells. When used with an anabolic agent like testosterone, an athlete can stay in a "sustained anabolic state."
+
+[Growth hormone](https://en.wikipedia.org/wiki/Growth_hormone) (GH) is produced by the pituitary gland and, as the name implies, causes growth in just about every human tissue. Bones, muscles, and even internal organs respond to GH. Our bodies produce higher levels of this hormone as we develop throughout childhood, but it's use and availability diminishes as we age. Animal models have shown growth hormone causes increases in both the size (hypertrophy) and number (hyperplasia) of muscle cells. A [study](https://www.ncbi.nlm.nih.gov/pubmed/18504393) in 2008 showed that giving adult males growth hormone resulted in increases in strength and power.  
+
+
+### * S3 Beta-2 agonists
+
+[Albuterol](https://en.wikipedia.org/wiki/Salbutamol) (a beta-2 agonist) is typically prescribed as a bronchodilator for asthma. This substance (and others like them) are attractive to athletes because they increased muscle growth and speed up the breakdown of triglycerides (i.e. burn fat). For example, In a 2005 [study](http://jap.physiology.org/content/98/5/1705.long) in the Journal of Applied Physiology, 48 untrained but healthy participants were randomized to either 1) albuterol treatment, 2) placebo capsule, or 3) a control group, given albuterol. These participants performed resistance exercises and after 40 days, the albuterol group had more strength gains than the placebo or control groups.
+
+
+### * S4 Hormone and metabolic modulators
+
+These drugs are usually taken to combat the side effects of the anabolic agents described above. They include substances like [Raloxifene](https://en.wikipedia.org/wiki/Raloxifene), a 'selective estrogen receptor modulator' and [Tamoxifen](https://en.wikipedia.org/wiki/Tamoxifen), an 'estrogen modulator'. 
+
+Why would an athlete take substances that affects their estrogen levels? This brings us back to the concept of cycling. The substances used in the pre-season or training phase of an athletes career are different than those used right before (or even during) a competition. After a cycle of anabolic agents, growth factors, and peptide hormones, an athlete will often take a drug like Raloxifene to reduce the negative effects of taking these substances. 
+
+For example, if I started a cycle of testosterone, my body might adapt to the added levels of this anabolic agent by suppressing it's internal (or 'endogenous') production of testosterone. When I stop taking testosterone (i.e. 'cycle off'), I would need something like Raloxifene to stimulate my body's internal production of testosterone (i.e. when my endogenous testosterone levels are suppressed). This allows me to re-calibrated my hormone levels after coming off a cycle of anabolic steroids. 
+
+### * S5 Diuretics and masking agents
+
+Diuretics cause your body to excrete increased amounts of electrolytes (sodium, potassium, etc.) and water. These drugs are usually taken by athletes in a sport that competes according to weight classes. Masking agents like [Probenecid](https://en.wikipedia.org/wiki/Probenecid), a medication used to treat gout, are also used to avoid detection in drugs tests. Other low-tech options include vinegar or even lemon juice. 
+
+
+## Prohibited Methods:
+
+### * M1 Manipulation of blood and blood components
+
+These methods are employed to improve oxygen transfer through the bloodstream. They include adding more red blood cells to the body by reintroduction any quantity of blood, or taking chemicals to artificially improve the uptake/transport/delivery of oxygen to the bloodstream (like [efaproxiral](https://en.wikipedia.org/wiki/Efaproxiral)). 
+
+### * M2 Chemical and physical manipulation
+
+This is just good old-fashioned *tampering.* Swapping urine/blood samples, trying to get someone to take the test for you, etc.
+
+### * M3 Gene doping
+
+This is the grayest area of performance enhancing drug testing. When gene doping was added to the 2009 World Anti-Doping Code, it prohibited the following methods:
+
+1. The transfer of nucleic acids or nucleic acid sequences;
+2. The use of normal or genetically modified cells;
+3. The use of agents that directly or indirectly affect functions known to influence performance by altering gene expression.
+
+Genetic modification in animals like the [PEPCK mouse](https://en.wikipedia.org/wiki/PEPCK-Cmus_mouse), and [Bully Whippets](https://en.wikipedia.org/wiki/Myostatin#Whippets) have prompted some coaches and athletes turning to gene doping for improving performance. The potential performance gains are promising with this technology, but most experts say we are still years (if not decades) away from being able to safely and effectively alter the human cells without being detected.
+
+According to Stephen M Roth and Henning Wackerhage in , "*After all, if gene doping for rogue researchers was within reach then most monogenetic diseases would have been cured by now, which is not the case.*"
+
+### * S6 Stimulants 
+
+These substances are used reduced fatigue, increase alertness and focus, and--in high enough doses--even produce a sense of confidence or euphoria.
+
+Common stimulants include prescribed medications like [Adderall](https://en.wikipedia.org/wiki/Adderall) and [Ritalin](https://en.wikipedia.org/wiki/Methylphenidate), over the counter substances like caffeine, guarana, and “bath salts” or [mephedrone](https://en.wikipedia.org/wiki/Mephedrone), or illegal narcotics like cocaine and methamphetamine.
+
+### * S7 Narcotics
+
+The term 'narcotics' originally covered substances that put a person to sleep (from the ancient Greek, *narko*, "to make numb"), but it has changed to include "street drugs" like heroin and opiates and opioids like morphine and [oxycodone](https://en.wikipedia.org/wiki/Oxycodone). 
+
+### * S8 Cannabinoids
+
+Cannabinoids include marijuana, tetrahydrocannabinol (THC), and synthetic cannabinoids like "spice" and "K2". The prohibitions surrounding marijuana are summarized in a 2011 [Sports Medicine](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3717337/) article and on the [FAQ](https://www.usada.org/substances/marijuana-faq/) provided by USADA. 
+
+### * S9 Glucocorticoids
+
+Glucocorticoids benefit athletes by increasing the availability of energy sources for exercising muscles.
+
+### * P1 Beta-blockers
+
+Beta-blockers, like [propranolol](https://en.wikipedia.org/wiki/Propranolol) improve performance by blocking sympathetic nervous system receptors and lowering blood pressure. These drugs reduce the effects of anxiety and are used by athletes that benefit from having steady hands. For example, in 2008 a Korean Olympic shooter had his medals removed for using [Propranolol](https://www.scientificamerican.com/article/olympics-shooter-doping-propranolol/). 
+
+### Additional resources
+
+Additional information on banned substances was taken from [dopinglinkki](https://dopinglinkki.fi/en/info-bank), an informational website provided by  [A-Clinic Foundation](http://www.a-klinikka.fi/) and the [Finnish Antidoping Agency FINADA](http://www.antidoping.fi/web/en) and the Finnish Ministry of Education. 
+
+
+## Count WADA categories 
+
+```{r count-wada_categories}
+knitr::kable(
+UsadaSanctWada %>% 
+    count(wada_category, sort = TRUE))
+```
+
+***
+
+
+## Count sports 
+
+
+```{r}
+knitr::kable(
+UsadaSanctWada %>% 
+    count(sport, sort = TRUE))
+```
+
+```{r substance-per-sport}
+knitr::kable(
+UsadaSanctWada %>% 
+    count(wada_category, sport) %>% 
+    arrange(desc(n)) %>% 
+    rename(`substance per sport` = n))
+```
+

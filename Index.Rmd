@@ -1,0 +1,374 @@
+---
+title: 'Doping Stats - U.S. Anti-Doping Agency (USADA) data'
+date: "`r Sys.Date()`"
+output:
+   rmdformats::readthedown:
+     highlight: kate
+---
+
+
+```{r setup, include=FALSE}
+# create figs folder ----
+if (!file.exists("figs/")) {
+    dir.create("figs/")
+}
+# create data folder ----
+if (!file.exists("data/")) {
+    dir.create("data/")
+}
+# create docs folder ----
+if (!file.exists("docs/")) {
+    dir.create("docs/")
+}
+library(knitr)
+library(rmdformats)
+library(tidyverse)
+library(devtools)
+library(hrbrthemes)
+# chunks set options
+knitr::opts_chunk$set(
+  echo = TRUE,
+  cache = FALSE,
+  prompt = FALSE,
+  tidy = FALSE,
+  fig.width = 10,
+  fig.height = 7,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE,
+  fig.path = "figs/"
+)
+# knit set options
+knitr::opts_knit$set(
+  width = 78,
+  progress = FALSE
+)
+# base options
+base::options(
+  tibble.print_max = 25,
+  tibble.width = 78,
+   max.print = 999999,
+  scipen = 100000000
+)
+# set theme
+ggplot2::theme_set(hrbrthemes::theme_ipsum_tw(
+  base_size = 11,
+  strip_text_size = 12,
+  axis_title_size = 13,
+  plot_title_size = 17,
+  subtitle_size = 15,
+  base_family = "Ubuntu",
+  strip_text_family = "TitilliumWeb-Regular",
+  axis_title_family = "TitilliumWeb-Regular",
+  subtitle_family = "TitilliumWeb-Regular",
+  plot_title_family = "JosefinSans-Regular"
+))
+```
+
+# Project overview
+
+This project contains data from the US anti-doping agency (USADA) on athletes, sports, substances, and sanctions.
+
+## The Data Sources
+
+These data comes from the Sanctions table on the USADA [website.](https://www.usada.org/testing/results/sanctions/) 
+
+```{r usada-sanctions.png, echo=FALSE}
+knitr::include_graphics("figs/usada-sanctions.png")
+```
+
+In order to extract data from the website, visualize the data, and then put the data into a Shiny application, I will have to start by scraping the data from the website above. I use the [`rvest` package](https://cran.r-project.org/web/packages/rvest/index.html) written by Hadley Wickham to scrape the `html` code.
+
+## Packages 
+
+The code chunk below loads the packages needed to reproduce the graphics. 
+
+```{r packages_download_data, message=FALSE, warning=FALSE, eval=TRUE}
+library(tidyverse)
+library(xml2)
+library(rvest)
+library(methods)
+library(magrittr)
+library(ggthemes)
+library(extrafont)
+library(ggplot2)
+library(gridExtra)
+library(wesanderson)
+library(tidytext)
+```
+
+### Part 1: Scraping the USADA website
+
+The website for these data is available [here](https://tinyurl.com/yc346fq5). The `rvest::read_html()` and `rvest::html_nodes()` functions extract the content from the table in the Web page and translates it from HTML into a data frame.
+
+```{r read_html_USADA, eval=TRUE, message=FALSE, warning=FALSE}
+USADA_url <- "https://www.usada.org/testing/results/sanctions/"
+USADA_extraction <- USADA_url %>%
+     xml2::read_html() %>%
+     rvest::html_nodes("table")
+```
+
+
+> ***Store and explore*** refers to storing an output of a call to an object, then checking the contents of that new object. This is a great way to get to know R, object-oriented programming, and how functions work together in packages. 
+
+### Check the structure of the extraction
+
+Look at the structure of `USADA_extraction`.
+
+```{r USADA_extraction_str, eval=TRUE}
+# check the structure of the new USADA_extraction object
+USADA_extraction %>% str()
+```
+
+This contains a `node` and a `doc` in the List of 2. 
+
+### Check the class of the extraction
+
+If I check the class of the list we extracted, we find...
+
+```{r USADA_extraction_class, eval=TRUE}
+USADA_extraction %>% class()
+```
+
+...this is an `xml_nodeset` with 2 lists (stored within the 1 list). The data we want from this object is in position `[[1]]` of this list. I can subset the `USADA_extraction` list with the `rvest::html_table()` function and store the table contents in the `UsadaRaw` object. I check my work using the `dplyr::glimpse(70)`.
+
+> why `dplyr::glimpse(70)`? It prints less to the screen and keeps the col width to <80, which is nice for working in plain text.
+
+```{r UsadaRaw, eval=TRUE}
+UsadaRaw <- rvest::html_table(USADA_extraction[[1]])
+UsadaRaw %>% dplyr::glimpse(70)
+```
+
+
+This reveals a data frame with `r nrow(UsadaRaw)` observations. The contents from the HTML list (`USADA_extraction`) has been converted to a data frame (`UsadaRaw`). I'm going to store this data frame as a .csv in a `data/raw` folder (so I don't have to scrape it every time I run this script). 
+
+```{r raw_data_path, eval=TRUE}
+# create data path
+raw_data_path <- "data/raw/"
+# create a new data folder
+if (!file.exists(raw_data_path)) {
+     dir.create(raw_data_path)
+}
+fs::dir_tree("data", recurse = FALSE)
+```
+
+Great! I can export these data into the new folder I just created. Now that I have a time-stamped data set, I will export it as a .csv file. 
+
+```{r export_raw, eval=TRUE}
+# export the .csv file
+readr::write_csv(as.data.frame(UsadaRaw), 
+          paste0(raw_data_path,
+                           "UsadaRaw-",
+                           base::noquote(lubridate::today()),
+                           ".csv"))
+# export as a .RData file, too.
+base::save.image(file = paste0(raw_data_path,
+                         "UsadaRaw-", 
+                         base::noquote(lubridate::today()),
+                         ".RData"))
+# check
+base::writeLines(fs::dir_ls("data/raw", 
+                      regexp = base::noquote(lubridate::today())))
+```
+
+
+## Wrangling: `plan() %>% do()`
+
+### Part 2: Wrangle the sanction dates 
+
+Use the combination of `stringr::str_split()` and `tidyr::unnest()` to wrangle some of the messy dates. 
+
+```{r import-UsadaSanct}
+# check
+processed_data <- fs::dir_ls("data/processed", 
+      regexp = base::noquote(lubridate::today()))
+# choose the csv
+usada_sanct_csv_data <- processed_data[2]
+# import
+UsadaSanct <- readr::read_csv(file = usada_sanct_csv_data)
+```
+
+
+```{r failed-to-parse, echo=FALSE}
+# fs::dir_ls("images")
+knitr::include_graphics(path = "figs/failed-to-parse.png")
+```
+
+I'll apply [Polya's problem solving steps](https://math.berkeley.edu/~gmelvin/polya.pdf) to figuring out what to do in this situation.
+
+1. Define the problem: *The data have two dates (`original` and `updated`) in a single column (`sanction_announced`)*
+
+2. Devise a plan: 
+
+   - *I'll use the `stringr` package to split the bad dates on the `"updated"` pattern,*  
+  
+   - *then I'll use `tidyr::unnest()` function to turn the vectors into multiple rows,*  
+  
+   - *use `dplyr::filter()` to remove the "original" dates,*  
+  
+   - *finally, I'll use `dplyr::mutate()` again with stringr::str_remove_all()` to format the new `sanction_date` column*
+
+3. Carry out the plan: *I execute all the steps outlined above in the code chunk below (with details in the comments)*
+
+## Visualize the non-analytic sanctions
+
+```{r import-visualize-data, message=FALSE, warning=FALSE}
+# get the data files in the processed folder
+recent_data_files <- fs::dir_info("data/processed") %>% 
+  # arrange by 
+  dplyr::arrange(desc(path)) %>% 
+  # grab the most recent three files
+  dplyr::slice(1:3) %>% 
+  # get only the path
+  dplyr::select(path) %>% 
+  # convert to vector
+  purrr::as_vector() %>% 
+  # un-name
+  base::unname(force = TRUE)
+# the RData
+usada_sanction_dates_rdata <- recent_data_files[3]
+
+# the Usada Sanctions
+usada_sanctions <- recent_data_files[2]
+
+# the no-names
+usada_no_names <- recent_data_files[1]
+UsadaSanctions <- readr::read_csv(usada_sanctions)
+UsadaSanctions %>% dplyr::glimpse(78)
+```
+
+### Non-substance sanctions
+
+We will store these non-substance sanctions in the `non_drug_sanctions`.
+
+```{r non_drug_sanctions}
+non_drug_sanctions <- c(
+  "test evasion",
+  "intravenous infusion",
+  "test refusal",
+  "trafficking and administering prohibitied substances",
+  "trafficking and administering prohibited substances",
+  "violating period of ineligibility",
+  "3 missed tests",
+  "3 whereabouts failures",
+  "failed to appear",
+  "failure to appear",
+  "failure to appear for test",
+  "failure to appear for testing",
+  "manipulation of forms",
+  "missed test violation",
+  "missed tests",
+  "non-analytical",
+  "non-analytical positive",
+  "non-analytical, ghrfs",
+  "non-analytical, possession of prohibited peptides",
+  "non-analytical; possession, trafficking, and administration of prohibited substances",
+  "possession, trafficking, and administration of prohibited substances",
+  "possession, trafficking, and administration of prohibited substances and methods",
+  "reduced sanction",
+  "sanction restarted for violation",
+  "refusal to submit to doping control",
+  "refusal to submit to sample collection",
+  "refusal to test",
+  "refusal/non-analytical positive",
+  "tampering"
+)
+# also store the substances
+substances <- sort(unique(UsadaSanctions$substance_reason))
+```
+
+
+
+Our goal is to use this vector to identify the 'non-analytic' substances in the `substance_reason` variable in the `UsadaSanctions` data set. But before we attempt this, we can check to see how many words this will match with `stringr::str_view_all()`.
+
+```{r str_view_all-glycerol_regex}
+# create regex
+non_drug_sanctions_regex <- paste0("(", stringr::str_c(non_drug_sanctions, 
+                                                   collapse = "|"), ")")
+```
+
+The output above shows how the `regex` we created in `non_drug_sanctions_regex` by pasting the terms together, separated only by the pipe (`|`).
+
+```{r head-non_drug_sanctions_regex}
+writeLines(non_drug_sanctions_regex)
+```
+
+```{r str_view_all-non_drug_sanctions_regex}
+stringr::str_view_all(string = substances, 
+                      pattern = non_drug_sanctions_regex, 
+                      match = TRUE)
+```
+
+Assign `non_drug_sanctions_regex` to `UsadaNonAnalytic`.
+
+```{r UsadaNonAnalytic-wada_cat}
+UsadaNonAnalytic <- UsadaSanctions %>%
+  dplyr::mutate(
+      # categories from WADA list
+    wada_cat =
+      dplyr::case_when(
+        # all that match the regex are labeled non-analytic
+        stringr::str_detect(string = substance_reason, 
+                       pattern = non_drug_sanctions_regex) ~ "non-analytic",
+        # all else are NA
+        TRUE ~ NA_character_))
+```
+
+We can check this new variable by using some counting and filtering. 
+
+```{r check-new-variable}
+UsadaNonAnalytic %>% 
+  # tally these up
+  dplyr::count(wada_cat, substance_reason) %>% 
+  # spread the new variable across the columns 
+  tidyr::pivot_wider(names_from = wada_cat, values_from = n) %>% 
+  # now filter the substance/reasons to those in the regex
+  dplyr::filter(stringr::str_detect(string = substance_reason, 
+                       pattern = non_drug_sanctions_regex)) %>%
+  # and arrange them by the most common non-analytic sanctions
+  dplyr::arrange(desc(`non-analytic`)) 
+```
+
+```{r more-than-three-non-analytic}
+UsadaSanctions %>%
+    dplyr::count(substance_reason, sort = TRUE) %>% 
+    dplyr::filter(n >= 5) %>% 
+    dplyr::mutate(substance_reason = reorder(substance_reason, n),
+                  non_analytic_count = n) %>% 
+    # remove the non-missing
+    dplyr::filter(stringr::str_detect(
+        string = substance_reason, 
+        pattern = non_drug_sanctions_regex)) %>% 
+    ggplot2::ggplot(aes(x = substance_reason, 
+                        y = non_analytic_count)) + 
+    geom_line(aes(group = substance_reason)) +
+    ggplot2::geom_point() + 
+    ggplot2::labs(x = "Substance or reason for sanction", 
+          y = "Non analytic count",
+          title = "Non-analytic reasons\nfor sanctions",
+          caption = "*sanctions occurring more than three times") + 
+    ggplot2::coord_flip()
+```
+
+All other non-analytic sanctions
+
+```{r less-than-equal-to-three-non-analytic}
+UsadaNonAnalytic %>%
+    dplyr::count(substance_reason, sort = TRUE) %>% 
+    dplyr::filter(n < 3) %>% 
+    dplyr::mutate(substance_reason = reorder(substance_reason, n),
+                  non_analytic_count = n) %>% 
+    # remove the non-missing
+    dplyr::filter(stringr::str_detect(
+        string = substance_reason, 
+        pattern = non_drug_sanctions_regex)) %>% 
+    ggplot2::ggplot(aes(x = substance_reason, 
+                        y = non_analytic_count)) + 
+    ggplot2::geom_point() + 
+    ggplot2::labs(x = "Substance or reason for sanction", 
+          y = "Non analytic count",
+          title = "Non-analytic reasons\n for sanctions",
+          caption = "*sanctions occurring <= 3x") + 
+    ggplot2::coord_flip()
+```
+

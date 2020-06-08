@@ -1,0 +1,358 @@
+
+
+
+```{r anabolic_agents}
+anabolic_agents <- c(
+  "1-androstenedione",
+
+  "1-testosterone and 1-androstenedione",
+
+  "17β-hydroxymethyl-17α-methyl-18-norandrost-1,4,13-trien-3-one",
+
+  "19-norandrostendione",
+  "19-norandrosterone",
+  "19-norandrosterone (19-na)",
+  "19-norandrosterone & 19-noretiocholanolone",
+  "19-norandrosterone and 19-noretiocholanolone",
+  "19-norandrosterone and testosterone",
+  "19-norandrosterone, epo, furosemide",
+
+  "6a-hydroxyandrostendione",
+  "6a-oh-androstenedione & 6b-ohandrosterone",
+  "anastrozole",
+  
+  "androgenic-anabolic steroids",
+  "androgenic anabolic steroid",
+  "androstendione",
+  "androstenedione",
+  "androstenedione, ostarine",
+  "dehydrochloromethyltestosterone (dhcmt)",
+  "dehydroepiandrosterone (“dhea”)",
+  "dehydroepiandrosterone (dhea)",
+
+  "boldenone",
+  "boldenone and 19-norandrosterone",
+  "boldenone metabolite",
+  "boldione",
+  "carboxy finasteride",
+  "dianabol",
+
+  "human growth hormone",
+  "human growth hormone (hgh)",
+  "human growth hormone (hgh) and testosterone",
+
+  "clenbuterol",
+  "clenbuterol, ostarine, and a tamoxifen metabolite",
+  "clomiphene",
+  "clomiphene and gw1516",
+  "clomiphene, letrozole",
+  "clomiphene, methylphenidate metabolite",
+  "formestane (4-hydroxyandrostendione)",
+
+  "testosterone",
+  "testosterone & modafinil",
+  "testosterone & recombinant human erythropoietin (r-epo)",
+  "testosterone and boldenone",
+  "testosterone metabolites (exogenous origin)",
+  "testosterone prohormones",
+  "testosterone, methandienone (dianabol) and stanzolol",
+  "testosterone, nandrolone & hcg",
+  "dexamethasone",
+  "drostanolone",
+  "elevated testosterone-epitestosterone (t/e) ratio",
+  "exogenous testosterone",
+  "tetrahydrogestrinone (thg)",
+  "finasteride",
+  "finasteride & 6-oxo-androstenedione",
+
+  "anabolic agent",
+  "anabolic agents",
+
+  "ghrp-2",
+  "growth hormone-releasing hexapeptide",
+  "gw1516",
+  "hormone antagonists, hormones and related substance, hcg, and an anabolic agent",
+  "insulin-like growth factor-1",
+  "methandienone",
+  "methandienone (dianabol)",
+  "ibutamoren",
+  "meldonium",
+  "metabolites of stanozolol",
+  "methasterone, ostarine, androstatrienedione",
+  "methenolone, androst-(2,3)-en-17-one, and ghrp-6",
+  "methylclostebol, promagnon",
+  "methylprednisolone",
+  "methyltestosterone",
+  "synthetic testosterone",
+  "proplyhexedrine; anabolic steroid",
+  "nandrolone metabolites",
+  "norandrosterone",
+  "stanozolol",
+  "stanozolol / methylphenidate",
+  "stanozolol metabolites",
+  "stanzolol",
+  "ostarine",
+  "ostarine and 7-keto-dhea",
+  "ostarine, arimistane",
+  "oxandrolone",
+  "oxandrolone and clenbuterol",
+  "oxymetholone",
+  "prednisone",
+  "rad140 and ibutamoren",
+  "tamoxifen",
+  "te ratio > 4:1 & hcg",
+  "trenbolone",
+  "trenbolone, epitrenbolone",
+  "triamcinolone acetonide",
+  "ostarine"
+)
+
+anabolic_agents_regex <- paste0("(", str_c(anabolic_agents, collapse = "|"), ")")
+
+str_view_all(substances, anabolic_agents_regex, match = TRUE)
+```
+
+Now I can use this regex pattern to assign a new category inside `dplyr::mutate()` and `dplyr::case_when()`.
+
+```{r S1S2_agents}
+UsadaSanct <- UsadaSanct %>%
+  dplyr::mutate(
+    S1S2_agents =
+      case_when(
+        str_detect(substance_reason, anabolic_agents_regex) ~ substance_reason,
+        TRUE ~ NA_character_))
+
+UsadaSanct %>%
+  dplyr::select(
+    athlete,
+    S1S2_agents,
+    substance_reason) %>%
+  dplyr::filter(!is.na(S1S2_agents)) %>%
+  dplyr::arrange(desc(S1S2_agents))
+```
+
+
+
+## 2. Stimulants & diuretics     
+
+```{r stimulants_diuretics}
+stimulants_diuretics <- c(
+  "1,3-dimethylbutylamine",
+  "1,3-dimethylbutylamine (dmba)",
+  # is a stimulant drug structurally related to methylhexanamine where
+  # a butyl group replaces the amyl group
+  "amphetamine",
+  "amphetamine & methamphetamine",
+  "amphetamine and methylhexaneamine",
+  "adverse cir & amphetamine",
+  # a prohibited stimulant
+  "acetazolamide",
+  # Diuretic - It can treat glaucoma, epilepsy, mountain sickness,
+  # and fluid retention (edema).
+  "benzoylecgonine",
+  "benzoylecgonine, a metabolite of cocaine",
+  # It is the corresponding carboxylic acid of cocaine
+  "canrenone",
+  # a steroidal antimineralocorticoid of the spirolactone group related
+  # to spironolactone which is used as a diuretic
+  "cathine (norpseudoephedrine)",
+
+  "chlorothiazide & hydrocholorthiazide",
+
+  "ephedrine",
+
+  "hydrochlorothiazide",
+  "hydrochlorothiazide & chlorothiazide",
+  "hydrochlorothiazide & triamterene",
+  "hydrochlorothiazide and chlorothiazide",
+  "hydrochlorothiazide and triamterene",
+  "hydrochlorothiazide, chlorothiazide",
+  "hydrochlorothiazide, chlorothiazide, triamterene and labetalol",
+  "hydrochlorothiazide, chlorothiazide, triamterene, 4-hydroxytriamterene",
+  "hydrochlorothiazide, triamterene",
+  # Diuretic - It can treat high blood pressure and fluid retention (edema).
+
+  "pseudoephdrine",
+  "pseudoephedrine",
+  "pseuedoephedrine",
+
+  "dimethylbutylamine",
+  "dimethylbutylamine (dmba)",
+
+  "l-methamphetamine",
+
+  "furosemide",
+  "furosemide and refusal",
+
+  "methylhexanamine",
+  "methylhexaneamine",
+  "methylhexaneamine & phenpromethamine",
+
+  "methylphenidate",
+
+  "methylphenidate - ritalinic acid",
+
+  "modafinil",
+
+  "zeranol",
+
+  "nikethamide",
+
+  "oxilofrine",
+
+  "phentermine",
+
+  "phentermine, boldenone and nandrolone",
+
+  "tuaminoheptane"
+)
+```
+
+## 3. Blood doping/Erythropoietin (EPO)  
+
+```{r blood_dope_epo}
+blood_dope_epo <- c(
+  "blood doping",
+  "epo",
+  "epo, hgh, cortisone",
+  "epo, hgh, testosterone",
+  "epo, hgh, testosterone, blood transfusions",
+  "epo, hgh, testosterone, cortisone",
+  "epo, hgh, testosterone, cortisone, blood transfusions",
+  "epo, testosterone, blood transfusions",
+  "epo, the testosterone/epitestosterone cream, and thg",
+  "erythropoiesis-stimulating agent",
+  "erythropoietin (epo)",
+  "erythropoietin (epo), human growth hormone (hgh), and testosterone",
+  "efaproxiral",
+  "human recombinant erythropoietin",
+  "recombinant human erythropoietin (repo)",
+  "use and possession of epo & evading sample collection",
+  "use, attempted use and possession of epo",
+  "oxygen-enhancing peptide hormone",
+  "r-epo"
+)
+```
+
+## 4. Cannabinoids  
+
+```{r cannabinoids}
+cannabinoids <- c(
+  "11-nor-tetrahydrocannabinol-9-carboxylic acid",
+  "metabolites of cannabis",
+  "metabolites of cannabis or tetrahydrocannabinol (thc)",
+  "metabolites of cannabis or tetrahydrocannibinol (thc)",
+  "cannabidiol",
+  "cannabis",
+  "carboxy-tetrahydrocannabinol (thc)",
+  "carboxy-thc",
+  "thc",
+  "thc metabolites",
+  "tetrahydrocannabinol",
+  "tetrahydrocannabinol acid"
+)
+```
+
+## 5. Beta blockers  
+
+```{r beta_blockers}
+beta_blockers <- c(
+  "formoterol",
+  "metoprolol",
+  "vilanterol",
+  "beta-2 agonist",
+  "higenamine",
+  "higenamine, 1,4‐dimethylpentylamine",
+  "salbutamol",
+  "salmeterol"
+)
+```
+
+## 6. Multiple substances     
+
+```{r multiple_substances}
+multiple_substances <- c(
+  "ostarine, stanozolol metabolites 16β-hydroxystanozolol and 4β-hydroxystanozolol,  hydrochlorothiazide, chlorothiazide",
+  "erythropoietin (epo), anabolic steroids, modafinil",
+  "amphetamine, and metabolites of drostanolone, mesterolone, and dehydrochloromethyltestosterone (dhcmt)",
+  "adverse cir, anastrozole, lgd-4033, & ostarine",
+  "adverse cir",
+  "anabolic androgenic steroid, rhepo, amphetamine",
+  "anabolic steroids, insulin, erythropoietin (epo), growth hormone and modafinil",
+  "anabolic androgenic steroid / adverse cir",
+  "thc and amphetamine",
+  "methylphenidate, anabolic agents/metabolites",
+  "modafanil - exogenous anabolic androgenic steroids",
+  "tamoxifen; boldenone, methandienone, drostanolone, and clenbuterol",
+  "epo, testosterone, blood transfusions and corticosteroids, trafficking, administration to others",
+  "ritalinic acid (ritalin)",
+  "use, attempted use and possession of epo and hgh",
+  "raloxifene, ostarine, ibutamoren, gw1516 sulfone, rad140, lgd4033, andarine",
+  "strychnine",
+  "tetrahydrogestrinone (thg) and modafinil"
+)
+```
+
+## 7. Pain killers      
+
+```{r pain_killers}
+pain_killers <- c(
+  "fentanyl",
+  "oxycodone",
+  "noroxycodone"
+)
+```
+
+## 8. Masking agents  
+
+```{r masking_agents}
+# what other masksing agents?
+masking_agents <- c("probenecid")
+```
+
+## 9. Glycerol (soon to change) 
+
+```{r glycerol}
+# ban is about to be lifted
+glycerol <- c("glycerol")
+```
+
+
+## 10. Non-substance sanctions
+
+```{r}
+non_drug_sanctions <- c(
+  "test evasion",
+  "intravenous infusion",
+  "test refusal",
+  "trafficking and administering prohibitied substances",
+  "violating period of ineligibility",
+  "3 missed tests",
+  "3 whereabouts failures",
+  "failed to appear",
+  "failure to appear",
+  "failure to appear for test",
+  "failure to appear for testing",
+  "manipulation of forms",
+  "missed test violation",
+  "missed tests",
+  "non-analytical",
+  "non-analytical positive",
+  "non-analytical, ghrfs",
+  "non-analytical, possession of prohibited peptides",
+  "non-analytical; possession, trafficking, and administration of prohibited substances",
+  "possession, trafficking, and administration of prohibited substances",
+  "possession, trafficking, and administration of prohibited substances and methods",
+  "reduced sanction",
+  "sanction restarted for violation",
+  "refusal to submit to doping control",
+  "refusal to submit to sample collection",
+  "refusal to test",
+  "refusal/non-analytical positive",
+  "tampering"
+)
+```
+
+
+
+

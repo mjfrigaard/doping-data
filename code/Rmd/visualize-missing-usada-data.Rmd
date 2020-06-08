@@ -1,0 +1,691 @@
+---
+title: "Part 3: United States Anti-Doping Agency Sanction Data - Visualize data frames"
+author: "Martin Frigaard"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(hrbrthemes)
+library(extrafont)
+library(knitr)
+library(rmdformats)
+library(knitr)
+library(blogdown)
+library(markdowntemplates)
+library(tidyverse)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  cache = FALSE,
+  prompt = FALSE,
+  tidy = FALSE,
+  fig.width = 10,
+  fig.height = 7,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE,
+  fig.path = "figs/"
+)
+# set theme
+ggplot2::theme_set(theme_ipsum_tw(
+  base_size = 9,
+  strip_text_size = 9,
+  axis_title_size = 11,
+  plot_title_size = 17,
+  subtitle_size = 13,
+  base_family = "Ubuntu",
+  strip_text_family = "TitilliumWeb-Regular",
+  axis_title_family = "TitilliumWeb-Regular",
+  subtitle_family = "TitilliumWeb-Regular",
+  plot_title_family = "JosefinSans-Regular"
+))
+```
+
+**Packages**
+
+```{r packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(magrittr)
+library(skimr)
+library(rlang)
+library(gt)
+library(visdat)
+library(inspectdf)
+library(foreign)
+library(naniar)
+```
+
+# Motivation 
+
+This is the third in the series of posts on the United States Anti-Doping Agency sanction data project (see [post 1]() and [post 2]()).
+
+## Import data 
+
+In the previous post, I wrangled the data into a new data structure that looks different from the original data on the [USADA website](https://www.usada.org/testing/results/sanctions/). These data are located in the `data/proessed` folder. I can use the `fs::dir_ls()` functions `regexp` argument to find the most recent files. 
+
+```{r usada_sanct_csv_data}
+# check
+processed_data <- fs::dir_ls("data/processed", 
+      regexp = base::noquote(lubridate::today()))
+# choose the csv
+usada_sanct_csv_data <- processed_data[2]
+# import
+UsadaSanctions <- readr::read_csv(file = usada_sanct_csv_data)
+```
+
+Below is the `UsadaSanctions` data frame. This data set has the original dimensions (5 columns, 571 observations). 
+
+```{r UsadaSanctions}
+UsadaSanctions %>% dplyr::glimpse(78)
+```
+
+```{r UsadaSanctionsInspCAT}
+UsadaSanctionsInspCAT <- UsadaSanctions %>% 
+    inspectdf::inspect_cat(df1 = .)
+```
+
+```{r}
+UsadaSanctionsInspCAT %>% 
+    inspectdf::show_plot(text_labels = TRUE)
+```
+
+
+This shows that the majority of sanction terms are for 2-years, with a loss of results. And the top three most common sports are `cycling`, `track and field`, and `mixed martial arts`. 
+
+## The World Anti-Doping Agency’s (WADA) Prohibited List
+
+USADA follows the list of prohibited substances published by the The World Anti-Doping Agency (WADA). The first list of prohibited substances was printed by the International Olympic Committee (IOC) in 1967. In the 1972 Munich Games, athletic testing was introduced. The current list of banned substances can be found on [WADA's website](https://www.usada.org/substances/prohibited-list/). A substance ends up banned when it meets two out of three of the following criteria:
+
+1. It has the potential to enhance sport performance      
+2. It represents an actual or potential health risk to the athlete     
+3. It violates the spirit of sport  
+
+The categories for prohibited substances include the following:
+
+### * S0 (Non-approved substances)
+
+This a blanket, catch-all for substances I would consider "obviously prohibited". 
+
+"*any pharmacological substance which is not addressed by any of the subsequent sections of the list and with no current approval by any governmental regulatory health authority for human therapeutic use (e.g. drugs under pre-clinical or clinical development or discontinued, designer drugs, substances approved only for veterinary use) is prohibited at all times.*"
+
+### * S1 Anabolic agents
+
+These are typically what people think of when they hear the word, "steroids." **Anabolic agents** (and their synthetic derivatives)  typically refer to [testosterone](https://en.wikipedia.org/wiki/Testosterone), a sex hormone produced by our body under normal conditions (although in slightly higher concentrations in males compared to females). 
+
+Hormones are made, stored, and released by our endocrine glands. They work like chemical messengers, communicating important information to various body systems. This includes messages like building up ("anabolic") or breaking down ("catabolic") muscle cells and tissue. Testosterone and it's precursors are the most commonly used anabolic agents because of their role in building and maintaining skeletal muscle tissue.   
+
+Perhaps the most famous example of anabolic steroid use was by sprinter [Ben Johnson](https://www.theguardian.com/australia-news/2017/jun/06/sportsbets-ben-johnson-ad-banned-for-making-light-of-drug-use) and the other athletes in the [1988 Summer Olympics](https://en.wikipedia.org/wiki/Athletics_at_the_1988_Summer_Olympics_%E2%80%93_Men%27s_100_metres). Johnson took [Stanozolol](https://en.wikipedia.org/wiki/Stanozolol), an anabolic agent popular among sprinters because of it's ability to gain lean muscle mass.  
+
+**Steroid Cycles:** Generally speaking, anabolic agents are used in the pre-competition or "building" phase to enhance an athlete's training, with a focus on developing size, power, or strength. Starting and stopping steroids use throughout a competitive season is referred to as "cycling" (or a "cycle"). The duration of cycles vary, but generally don't exceed 8 weeks. Sports and athletic events in which size or strength contribute to performance have a potential market for anabolic agents. In fact, coaches and athletes use various resistance training programs and diets to try and stimulate these processes throughout an athletic career. 
+
+These are stored in the string `anabolic_agents` below
+
+### * S2 Peptide hormones, growth factors, related substances, and mimetics
+
+**What causes muscle growth?** Training causes tiny tears and injuries to muscle tissues. These tiny injuries initiate a cascade of chemical messages that fills the muscle cells with more contractile proteins (actin and myosin). Collectively, this process is referred to as [hypertrophy](https://en.wikipedia.org/wiki/Hypertrophy). It results in an increase in muscle size and protein content, but it does not typically result in the production of more muscle cells. [Hyperplasia](https://en.wikipedia.org/wiki/Hyperplasia) is the creation of new muscle cells, and its still unclear if prolonged resistance training can stimulate this response.  
+
+We've established earlier that hormones carry specific chemical messages to various cells throughout the body. Specific messages are intended for specific hormone receptors, like a key made to fit in a lock. These receptors vary by location (the cell membrane vs. inside the cell) and type (peptide vs. steroid hormone receptors). Increasing the amount of anabolic hormone messages can stimulate muscle growth, but so can increasing the number of receptors for that hormone. For example, if I flood my bloodstream with testosterone, and very few receptors are around to hear that "build muscle" message (and communicate it to my muscle tissue cells), nothing would change. However, if I increased the rate this specific signal was heard by increasing the number of receptors, I could indirectly boost the strength of that chemical message. 
+
+Peptide hormones are also produced by the endocrine system and used by athletes to stimulate muscle growth and gains in strength, speed, or power.
+
+[Insulin](https://en.wikipedia.org/wiki/Insulin), a peptide hormone, is often used in combination with testosterone. Insulin sends a chemical signal that stimulates the absorption of nutrients into the muscle cells. When used with an anabolic agent like testosterone, an athlete can stay in a "sustained anabolic state."
+
+[Growth hormone](https://en.wikipedia.org/wiki/Growth_hormone) (GH) is produced by the pituitary gland and, as the name implies, causes growth in just about every human tissue. Bones, muscles, and even internal organs respond to GH. Our bodies produce higher levels of this hormone as we develop throughout childhood, but it's use and availability diminishes as we age. Animal models have shown growth hormone causes increases in both the size (hypertrophy) and number (hyperplasia) of muscle cells. A [study](https://www.ncbi.nlm.nih.gov/pubmed/18504393) in 2008 showed that giving adult males growth hormone resulted in increases in strength and power.  
+
+### * S3 Beta-2 agonists
+
+[Albuterol](https://en.wikipedia.org/wiki/Salbutamol) (a beta-2 agonist) is typically prescribed as a bronchodilator for asthma. This substance (and others like them) are attractive to athletes because they increased muscle growth and speed up the breakdown of triglycerides (i.e. burn fat). For example, In a 2005 [study](http://jap.physiology.org/content/98/5/1705.long) in the Journal of Applied Physiology, 48 untrained but healthy participants were randomized to either 1) albuterol treatment, 2) placebo capsule, or 3) a control group, given albuterol. These participants performed resistance exercises and after 40 days, the albuterol group had more strength gains than the placebo or control groups.
+
+```{r beta_blockers}
+beta_blockers <- c(
+  "formoterol",
+  "metoprolol",
+  "vilanterol",
+  "beta-2 agonist",
+  "higenamine",
+  "higenamine, 1,4‐dimethylpentylamine",
+  "salbutamol",
+  "salmeterol"
+)
+
+beta_blockers_regex <- paste0("(", stringr::str_c(beta_blockers, 
+                                                    collapse = "|"), ")")
+```
+
+```{r str_view_all-beta_blockers_regex}
+stringr::str_view_all(string = substances, 
+                      pattern = beta_blockers_regex, 
+                      match = TRUE)
+```
+
+```{r S3_agents}
+UsadaSanctions <- UsadaSanctions %>%
+  dplyr::mutate(
+    S3_agents =
+      case_when(
+        stringr::str_detect(string = substance_reason, 
+                            pattern = anabolic_agents_regex) ~ substance_reason,
+        TRUE ~ NA_character_))
+```
+
+### * S4 Hormone and metabolic modulators
+
+These drugs are usually taken to combat the side effects of the anabolic agents described above. They include substances like [Raloxifene](https://en.wikipedia.org/wiki/Raloxifene), a 'selective estrogen receptor modulator' and [Tamoxifen](https://en.wikipedia.org/wiki/Tamoxifen), an 'estrogen modulator'. 
+
+Why would an athlete take substances that affects their estrogen levels? This brings us back to the concept of cycling. The substances used in the pre-season or training phase of an athletes career are different than those used right before (or even during) a competition. After a cycle of anabolic agents, growth factors, and peptide hormones, an athlete will often take a drug like Raloxifene to reduce the negative effects of taking these substances. 
+
+For example, if I started a cycle of testosterone, my body might adapt to the added levels of this anabolic agent by suppressing it's internal (or 'endogenous') production of testosterone. When I stop taking testosterone (i.e. 'cycle off'), I would need something like Raloxifene to stimulate my body's internal production of testosterone (i.e. when my endogenous testosterone levels are suppressed). This allows me to re-calibrated my hormone levels after coming off a cycle of anabolic steroids. 
+
+### * S5 Diuretics and masking agents
+
+Diuretics cause your body to excrete increased amounts of electrolytes (sodium, potassium, etc.) and water. These drugs are usually taken by athletes in a sport that competes according to weight classes. Masking agents like [Probenecid](https://en.wikipedia.org/wiki/Probenecid), a medication used to treat gout, are also used to avoid detection in drugs tests. Other low-tech options include vinegar or even lemon juice. 
+
+
+## Prohibited Methods:
+
+### * M1 Manipulation of blood and blood components
+
+These methods are employed to improve oxygen transfer through the bloodstream. They include adding more red blood cells to the body by reintroduction any quantity of blood, or taking chemicals to artificially improve the uptake/transport/delivery of oxygen to the bloodstream (like [efaproxiral](https://en.wikipedia.org/wiki/Efaproxiral)). 
+
+
+```{r blood_dope_epo}
+blood_dope_epo <- c(
+  "blood doping",
+  "epo",
+  "epo, hgh, cortisone",
+  "epo, hgh, testosterone",
+  "epo, hgh, testosterone, blood transfusions",
+  "epo, hgh, testosterone, cortisone",
+  "epo, hgh, testosterone, cortisone, blood transfusions",
+  "epo, testosterone, blood transfusions",
+  "epo, the testosterone/epitestosterone cream, and thg",
+  "erythropoiesis-stimulating agent",
+  "erythropoietin (epo)",
+  "erythropoietin (epo), human growth hormone (hgh), and testosterone",
+  "efaproxiral",
+  "human recombinant erythropoietin",
+  "recombinant human erythropoietin (repo)",
+  "use and possession of epo & evading sample collection",
+  "use, attempted use and possession of epo",
+  "oxygen-enhancing peptide hormone",
+  "r-epo"
+)
+
+blood_dope_epo_regex <- paste0("(", stringr::str_c(blood_dope_epo, 
+                                                    collapse = "|"), ")")
+```
+
+Check with the regex.
+
+```{r str_view_all-blood_dope_epo_regex}
+stringr::str_view_all(string = substances, 
+                      pattern = blood_dope_epo_regex, 
+                      match = TRUE)
+```
+
+Assign `blood_dope_epo_regex` to the `UsadaSanctions` as `M1_agents`.
+
+```{r M1_agents}
+UsadaSanctions <- UsadaSanctions %>%
+  dplyr::mutate(
+    M1_agents =
+      case_when(
+        stringr::str_detect(string = substance_reason, 
+                      pattern = blood_dope_epo_regex) ~ substance_reason,
+        TRUE ~ NA_character_))
+
+UsadaSanctions %>%
+  dplyr::select(
+    athlete,
+    M1_agents,
+    substance_reason) %>%
+  dplyr::filter(!is.na(M1_agents)) %>%
+  dplyr::arrange(desc(M1_agents))
+```
+
+### * M2 Chemical and physical manipulation
+
+This is just good old-fashioned *tampering.* Swapping urine/blood samples, trying to get someone to take the test for you, etc.
+
+### * M3 Gene doping
+
+This is the grayest area of performance enhancing drug testing. When gene doping was added to the 2009 World Anti-Doping Code, it prohibited the following methods:
+
+1. The transfer of nucleic acids or nucleic acid sequences;
+2. The use of normal or genetically modified cells;
+3. The use of agents that directly or indirectly affect functions known to influence performance by altering gene expression.
+
+Genetic modification in animals like the [PEPCK mouse](https://en.wikipedia.org/wiki/PEPCK-Cmus_mouse), and [Bully Whippets](https://en.wikipedia.org/wiki/Myostatin#Whippets) have prompted some coaches and athletes turning to gene doping for improving performance. The potential performance gains are promising with this technology, but most experts say we are still years (if not decades) away from being able to safely and effectively alter the human cells without being detected.
+
+According to Stephen M Roth and Henning Wackerhage in , "*After all, if gene doping for rogue researchers was within reach then most monogenetic diseases would have been cured by now, which is not the case.*"
+
+### * S6 Stimulants 
+
+These substances are used reduced fatigue, increase alertness and focus, and--in high enough doses--even produce a sense of confidence or euphoria.
+
+Common stimulants include prescribed medications like [Adderall](https://en.wikipedia.org/wiki/Adderall) and [Ritalin](https://en.wikipedia.org/wiki/Methylphenidate), over the counter substances like caffeine, guarana, and “bath salts” or [mephedrone](https://en.wikipedia.org/wiki/Mephedrone), or illegal narcotics like cocaine and methamphetamine.
+
+```{r stimulants_diuretics}
+stimulants_diuretics <- c(
+  "1,3-dimethylbutylamine",
+  "1,3-dimethylbutylamine (dmba)",
+  # is a stimulant drug structurally related to methylhexanamine where
+  # a butyl group replaces the amyl group
+  "amphetamine",
+  "amphetamine & methamphetamine",
+  "amphetamine and methylhexaneamine",
+  "adverse cir & amphetamine",
+  # a prohibited stimulant
+  "acetazolamide",
+  # Diuretic - It can treat glaucoma, epilepsy, mountain sickness,
+  # and fluid retention (edema).
+  "benzoylecgonine",
+  "benzoylecgonine, a metabolite of cocaine",
+  # It is the corresponding carboxylic acid of cocaine
+  "canrenone",
+  # a steroidal antimineralocorticoid of the spirolactone group related
+  # to spironolactone which is used as a diuretic
+  "cathine (norpseudoephedrine)",
+
+  "chlorothiazide & hydrocholorthiazide",
+
+  "ephedrine",
+
+  "hydrochlorothiazide",
+  "hydrochlorothiazide & chlorothiazide",
+  "hydrochlorothiazide & triamterene",
+  "hydrochlorothiazide and chlorothiazide",
+  "hydrochlorothiazide and triamterene",
+  "hydrochlorothiazide, chlorothiazide",
+  "hydrochlorothiazide, chlorothiazide, triamterene and labetalol",
+  "hydrochlorothiazide, chlorothiazide, triamterene, 4-hydroxytriamterene",
+  "hydrochlorothiazide, triamterene",
+  # Diuretic - It can treat high blood pressure and fluid retention (edema).
+
+  "pseudoephdrine",
+  "pseudoephedrine",
+  "pseuedoephedrine",
+
+  "dimethylbutylamine",
+  "dimethylbutylamine (dmba)",
+
+  "l-methamphetamine",
+
+  "furosemide",
+  "furosemide and refusal",
+
+  "methylhexanamine",
+  "methylhexaneamine",
+  "methylhexaneamine & phenpromethamine",
+
+  "methylphenidate",
+
+  "methylphenidate - ritalinic acid",
+
+  "modafinil",
+
+  "zeranol",
+
+  "nikethamide",
+
+  "oxilofrine",
+
+  "phentermine",
+
+  "phentermine, boldenone and nandrolone",
+
+  "tuaminoheptane"
+)
+# create regex
+stimulants_diuretics_regex <- paste0("(", stringr::str_c(stimulants_diuretics, 
+                                                           collapse = "|"), ")")
+
+```
+
+I can check this with the `stringr::str_view_all()`
+
+```{r str_view_all-stimulants_diuretics}
+stringr::str_view_all(string = substances, 
+                      pattern = stimulants_diuretics_regex, 
+                      match = TRUE)
+```
+
+Now we can assign the `stimulants_diuretics_regex` to the `UsadaSanctions` as `S6_agents`.
+
+```{r S6_agents}
+UsadaSanctions <- UsadaSanctions %>%
+  dplyr::mutate(
+    S6_agents =
+      case_when(
+        stringr::str_detect(string = substance_reason, 
+                      pattern = stimulants_diuretics_regex) ~ substance_reason,
+        TRUE ~ NA_character_))
+
+UsadaSanctions %>%
+  dplyr::select(
+    athlete,
+    S6_agents,
+    substance_reason) %>%
+  dplyr::filter(!is.na(S6_agents)) %>%
+  dplyr::arrange(desc(S6_agents))
+```
+
+
+### * S7 Narcotics
+
+The term 'narcotics' originally covered substances that put a person to sleep (from the ancient Greek, *narko*, "to make numb"), but it has changed to include "street drugs" like heroin and opiates and opioids like morphine and [oxycodone](https://en.wikipedia.org/wiki/Oxycodone). 
+
+### * S8 Cannabinoids
+
+Cannabinoids include marijuana, tetrahydrocannabinol (THC), and synthetic cannabinoids like "spice" and "K2". The prohibitions surrounding marijuana are summarized in a 2011 [Sports Medicine](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3717337/) article and on the [FAQ](https://www.usada.org/substances/marijuana-faq/) provided by USADA. 
+
+```{r cannabinoids}
+cannabinoids <- c(
+  "11-nor-tetrahydrocannabinol-9-carboxylic acid",
+  "metabolites of cannabis",
+  "metabolites of cannabis or tetrahydrocannabinol (thc)",
+  "metabolites of cannabis or tetrahydrocannibinol (thc)",
+  "cannabidiol",
+  "cannabis",
+  "carboxy-tetrahydrocannabinol (thc)",
+  "carboxy-thc",
+  "thc",
+  "thc metabolites",
+  "tetrahydrocannabinol",
+  "tetrahydrocannabinol acid"
+)
+# create regex
+cannabinoids_regex <- paste0("(", stringr::str_c(cannabinoids, 
+                                                   collapse = "|"), ")")
+
+```
+
+I can check this with the `stringr::str_view_all()`
+
+```{r str_view_all-cannabinoids_regex}
+stringr::str_view_all(string = substances, 
+                      pattern = cannabinoids_regex, 
+                      match = TRUE)
+```
+
+It doesn't look like there are any cannabinoids, but I will create the `S8_agents` variable for the future.
+
+```{r S8_agents}
+UsadaSanctions <- UsadaSanctions %>%
+  dplyr::mutate(
+    S8_agents =
+      dplyr::case_when(
+        stringr::str_detect(string = substance_reason, 
+                      pattern = cannabinoids_regex) ~ substance_reason,
+        TRUE ~ NA_character_))
+
+UsadaSanctions %>%
+  dplyr::select(
+    athlete,
+    S8_agents,
+    substance_reason) %>%
+  dplyr::filter(!is.na(S8_agents)) %>%
+  dplyr::arrange(desc(S9_agents))
+```
+
+
+### * S9 Glucocorticoids
+
+Glucocorticoids benefit athletes by increasing the availability of energy sources for exercising muscles.
+
+### * P1 Beta-blockers
+
+Beta-blockers, like [propranolol](https://en.wikipedia.org/wiki/Propranolol) improve performance by blocking sympathetic nervous system receptors and lowering blood pressure. These drugs reduce the effects of anxiety and are used by athletes that benefit from having steady hands. For example, in 2008 a Korean Olympic shooter had his medals removed for using [Propranolol](https://www.scientificamerican.com/article/olympics-shooter-doping-propranolol/). 
+
+### Additional resources
+
+Additional information on banned substances was taken from [dopinglinkki](https://dopinglinkki.fi/en/info-bank), an informational website provided by  [A-Clinic Foundation](http://www.a-klinikka.fi/) and the [Finnish Antidoping Agency FINADA](http://www.antidoping.fi/web/en) and the Finnish Ministry of Education. 
+
+## Multiple substances     
+
+These are multiple substances, too broad to characterize into a single category. 
+
+```{r multiple_substances}
+multiple_substances <- c(
+  "ostarine, stanozolol metabolites 16β-hydroxystanozolol and 4β-hydroxystanozolol,  hydrochlorothiazide, chlorothiazide",
+  "erythropoietin (epo), anabolic steroids, modafinil",
+  "amphetamine, and metabolites of drostanolone, mesterolone, and dehydrochloromethyltestosterone (dhcmt)",
+  "adverse cir, anastrozole, lgd-4033, & ostarine",
+  "adverse cir",
+  "anabolic androgenic steroid, rhepo, amphetamine",
+  "anabolic steroids, insulin, erythropoietin (epo), growth hormone and modafinil",
+  "anabolic androgenic steroid / adverse cir",
+  "thc and amphetamine",
+  "methylphenidate, anabolic agents/metabolites",
+  "modafanil - exogenous anabolic androgenic steroids",
+  "tamoxifen; boldenone, methandienone, drostanolone, and clenbuterol",
+  "epo, testosterone, blood transfusions and corticosteroids, trafficking, administration to others",
+  "ritalinic acid (ritalin)",
+  "use, attempted use and possession of epo and hgh",
+  "raloxifene, ostarine, ibutamoren, gw1516 sulfone, rad140, lgd4033, andarine",
+  "strychnine",
+  "tetrahydrogestrinone (thg) and modafinil"
+)
+
+# create regex
+multiple_substances_regex <- paste0("(", stringr::str_c(multiple_substances, 
+                                                   collapse = "|"), ")")
+```
+
+Check this with the `stringr::str_view_all()`
+
+```{r str_view_all-multiple_substances_regex}
+stringr::str_view_all(string = substances, 
+                      pattern = multiple_substances_regex, 
+                      match = TRUE)
+```
+
+Assign
+
+```{r multip_agents}
+UsadaSanctions <- UsadaSanctions %>%
+  dplyr::mutate(
+    multip_agents =
+      dplyr::case_when(
+        stringr::str_detect(string = substance_reason, 
+                      pattern = multiple_substances_regex) ~ substance_reason,
+        TRUE ~ NA_character_))
+
+UsadaSanctions %>%
+  dplyr::select(
+    athlete,
+    multip_agents,
+    substance_reason) %>%
+  dplyr::filter(!is.na(multip_agents)) %>%
+  dplyr::arrange(desc(multip_agents))
+```
+
+
+## 7. Pain killers     
+
+These are obvious pain killers. You can Google them if you'd like more information. 
+
+```{r pain_killers}
+pain_killers <- c(
+  "fentanyl",
+  "oxycodone",
+  "noroxycodone")
+```
+
+Use `stringr::str_view_all()`
+
+```{r str_view_all-pain_killers_regex}
+# create regex
+pain_killers_regex <- paste0("(", stringr::str_c(pain_killers, 
+                                                   collapse = "|"), ")")
+stringr::str_view_all(string = substances, 
+                      pattern = pain_killers_regex, 
+                      match = TRUE)
+```
+
+Assign `pain_kill`.
+
+```{r pain_kill}
+UsadaSanctions <- UsadaSanctions %>%
+  dplyr::mutate(
+    pain_kill =
+      dplyr::case_when(
+        stringr::str_detect(string = substance_reason, 
+                       pattern = pain_killers_regex) ~ substance_reason,
+        TRUE ~ NA_character_))
+
+UsadaSanctions %>%
+  dplyr::select(
+    athlete,
+    pain_kill,
+    substance_reason) %>%
+  dplyr::filter(!is.na(pain_kill)) %>%
+  dplyr::arrange(desc(pain_kill))
+```
+
+
+## 8. Masking agents  
+
+```{r masking_agents}
+# what other masksing agents?
+masking_agents <- c("probenecid")
+```
+
+```{r str_view_all-masking_agents_regex}
+# create regex
+masking_agents_regex <- paste0("(", stringr::str_c(masking_agents, 
+                                                   collapse = "|"), ")")
+stringr::str_view_all(string = substances, 
+                      pattern = masking_agents_regex, 
+                      match = TRUE)
+```
+
+Assign `masking_agents` to `UsadaSanctions`.
+
+```{r assign-masking_agents}
+UsadaSanctions <- UsadaSanctions %>%
+  dplyr::mutate(
+    masking_agents =
+      dplyr::case_when(
+        stringr::str_detect(string = substance_reason, 
+                       pattern = masking_agents_regex) ~ substance_reason,
+        TRUE ~ NA_character_))
+
+UsadaSanctions %>%
+  dplyr::select(
+    athlete,
+    masking_agents,
+    substance_reason) %>%
+  dplyr::filter(!is.na(masking_agents)) %>%
+  dplyr::arrange(desc(masking_agents))
+```
+
+## 9. Glycerol (soon to change) 
+
+```{r glycerol}
+# ban is about to be lifted
+glycerol <- c("glycerol")
+```
+
+```{r str_view_all-glycerol_regex}
+# create regex
+glycerol_regex <- paste0("(", stringr::str_c(glycerol, 
+                                                   collapse = "|"), ")")
+stringr::str_view_all(string = substances, 
+                      pattern = glycerol_regex, 
+                      match = TRUE)
+```
+
+Assign `glycerol_regex` to `UsadaSanctions`.
+
+```{r assign-glycerol_regex}
+UsadaSanctions <- UsadaSanctions %>%
+  dplyr::mutate(
+    glycerol_regex =
+      dplyr::case_when(
+        stringr::str_detect(string = substance_reason, 
+                       pattern = glycerol_regex) ~ substance_reason,
+        TRUE ~ NA_character_))
+
+UsadaSanctions %>%
+  dplyr::select(
+    athlete,
+    glycerol_regex,
+    substance_reason) %>%
+  dplyr::filter(!is.na(glycerol_regex)) %>%
+  dplyr::arrange(desc(glycerol_regex))
+```
+
+## 10. Non-substance sanctions
+
+```{r non_drug_sanctions}
+non_drug_sanctions <- c(
+  "test evasion",
+  "intravenous infusion",
+  "test refusal",
+  "trafficking and administering prohibitied substances",
+  "violating period of ineligibility",
+  "3 missed tests",
+  "3 whereabouts failures",
+  "failed to appear",
+  "failure to appear",
+  "failure to appear for test",
+  "failure to appear for testing",
+  "manipulation of forms",
+  "missed test violation",
+  "missed tests",
+  "non-analytical",
+  "non-analytical positive",
+  "non-analytical, ghrfs",
+  "non-analytical, possession of prohibited peptides",
+  "non-analytical; possession, trafficking, and administration of prohibited substances",
+  "possession, trafficking, and administration of prohibited substances",
+  "possession, trafficking, and administration of prohibited substances and methods",
+  "reduced sanction",
+  "sanction restarted for violation",
+  "refusal to submit to doping control",
+  "refusal to submit to sample collection",
+  "refusal to test",
+  "refusal/non-analytical positive",
+  "tampering"
+)
+```
+
+```{r str_view_all-glycerol_regex}
+# create regex
+non_drug_sanctions_regex <- paste0("(", stringr::str_c(non_drug_sanctions, 
+                                                   collapse = "|"), ")")
+stringr::str_view_all(string = substances, 
+                      pattern = non_drug_sanctions_regex, 
+                      match = TRUE)
+```
+
+Assign `non_drug_sanctions_regex` to `UsadaSanctions`.
+
+```{r assign-non_drug_sanct}
+UsadaSanctions <- UsadaSanctions %>%
+  dplyr::mutate(
+    non_drug_sanct =
+      dplyr::case_when(
+        stringr::str_detect(string = substance_reason, 
+                       pattern = non_drug_sanctions_regex) ~ substance_reason,
+        TRUE ~ NA_character_))
+
+UsadaSanctions %>%
+  dplyr::select(
+    athlete,
+    non_drug_sanct,
+    substance_reason) %>%
+  dplyr::filter(!is.na(non_drug_sanct)) %>%
+  dplyr::arrange(desc(non_drug_sanct))
+```
+
+
+```{r}
+UsadaSanctions %>% 
+    select(athlete, 
+           substance_reason, 
+           S1S2_agents:non_drug_sanct) 
+```
+
+

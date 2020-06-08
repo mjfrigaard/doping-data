@@ -1,0 +1,215 @@
+---
+title: "(Part 2.3) United States Anti-Doping Agency Sanction Data - S3 Beta-2 agonists"
+author: "Martin Frigaard"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(hrbrthemes)
+library(extrafont)
+library(knitr)
+library(rmdformats)
+library(knitr)
+library(blogdown)
+library(markdowntemplates)
+library(tidyverse)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  cache = FALSE,
+  prompt = FALSE,
+  tidy = FALSE,
+  fig.width = 10,
+  fig.height = 7,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE,
+  fig.path = "figs/"
+)
+# set theme
+ggplot2::theme_set(theme_ipsum_tw(
+  base_size = 9,
+  strip_text_size = 9,
+  axis_title_size = 11,
+  plot_title_size = 17,
+  subtitle_size = 13,
+  base_family = "Ubuntu",
+  strip_text_family = "TitilliumWeb-Regular",
+  axis_title_family = "TitilliumWeb-Regular",
+  subtitle_family = "TitilliumWeb-Regular",
+  plot_title_family = "JosefinSans-Regular"
+))
+```
+
+**Packages**
+
+```{r packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(magrittr)
+library(skimr)
+library(rlang)
+library(gt)
+library(visdat)
+library(inspectdf)
+library(foreign)
+library(naniar)
+```
+
+# Motivation 
+
+In these scripts (`04`), we will be wrangling the substances from the USADA website. 
+
+## Import data 
+
+In the previous post, I wrangled the data into a new data structure that looks different from the original data on the [USADA website](https://www.usada.org/testing/results/sanctions/). These data are located in the `data/proessed` folder. I can use the `fs::dir_ls()` functions `regexp` argument to find the most recent files. 
+
+```{r usada_sanct_csv_data}
+# check
+ProcessedData <- fs::dir_ls("data/processed", 
+      regexp = base::noquote(lubridate::today())) %>% 
+      as_tibble()
+ProcessedData
+```
+
+Here we can import the latest sanctions data set. 
+
+```{r import-processed_data}
+# choose the csv
+usada_sanct_csv_data <- ProcessedData %>% 
+    dplyr::filter(stringr::str_detect(string = value, 
+          pattern = "UsadaSanctions")) %>% 
+    as_vector() %>% 
+    base::unname()
+
+# choose the RData
+usada_anabolic_steroids_rdata <- ProcessedData %>% 
+    dplyr::filter(stringr::str_detect(string = value, 
+          pattern = "02.2-usada-S1-anabolic-steroids")) %>% 
+    as_vector() %>% 
+    base::unname()
+
+# import UsadaSanctions
+UsadaSanctions <- readr::read_csv(file = usada_sanct_csv_data)
+
+# import 02.2-usada-S1-anabolic-steroids
+base::load(usada_anabolic_steroids_rdata)
+
+ls()
+```
+
+Below is the `UsadaSanctions` data frame. This data set has the original dimensions (5 columns, 571 observations). 
+
+```{r UsadaSanctions}
+UsadaSanctions %>% dplyr::glimpse(78)
+```
+
+### * S3 Beta-2 agonists
+
+[Albuterol](https://en.wikipedia.org/wiki/Salbutamol) (a beta-2 agonist) is typically prescribed as a bronchodilator for asthma. This substance (and others like them) are attractive to athletes because they increased muscle growth and speed up the breakdown of triglycerides (i.e. burn fat). For example, In a 2005 [study](http://jap.physiology.org/content/98/5/1705.long) in the Journal of Applied Physiology, 48 untrained but healthy participants were randomized to either 1) albuterol treatment, 2) placebo capsule, or 3) a control group, given albuterol. These participants performed resistance exercises and after 40 days, the albuterol group had more strength gains than the placebo or control groups.
+
+```{r beta_blockers}
+beta_blockers <- c(
+  "formoterol",
+  "metoprolol",
+  "vilanterol",
+  "beta-2 agonist",
+  "higenamine",
+  "higenamine, 1,4‐dimethylpentylamine",
+  "salbutamol",
+  "salmeterol"
+)
+
+beta_blockers_regex <- paste0("(", stringr::str_c(beta_blockers, 
+                                                    collapse = "|"), ")")
+
+stringr::str_view_all(string = substances, 
+                      pattern = beta_blockers_regex, 
+                      match = TRUE)
+```
+
+Assign this to `wada_cat`.
+
+```{r UsadaS3Beta2Agonists}
+UsadaS3Beta2Agonists <- UsadaSanctions %>%
+  dplyr::select(athlete, 
+                sport, 
+                substance_reason) %>% 
+  dplyr::mutate(
+      # create wada category
+    wada_cat =
+      case_when(
+        # non-analytic first
+        stringr::str_detect(string = substance_reason, 
+                       pattern = non_drug_sanctions_regex) ~ "non-analytic",
+        
+        # S3 Beta-2 agonists 2nd 
+        stringr::str_detect(string = substance_reason, 
+                          pattern = beta_blockers_regex) ~ "S3 Beta-2 agonists",
+        
+        # S1 Anabolic Agents 3rd 
+        stringr::str_detect(string = substance_reason, 
+                        pattern = anabolic_agents_regex) ~ "S1 Anabolic Agents",
+        
+        TRUE ~ NA_character_))
+# check
+UsadaS3Beta2Agonists %>% dplyr::count(wada_cat)
+```
+
+We will check these 12 S3 Beta-2 agonists in the visualization below.
+
+```{r beta_blockers-top-5}
+ggp_beta_blockers_top5 <- UsadaS3Beta2Agonists %>%
+    dplyr::filter(wada_cat == "S3 Beta-2 agonists") %>% 
+    dplyr::count(substance_reason, sort = TRUE) %>% 
+    dplyr::mutate(substance_reason = reorder(substance_reason, n),
+                  beta_agonists_count = n) %>% 
+    dplyr::filter(stringr::str_detect(
+                    string = substance_reason, 
+                    pattern = beta_blockers_regex)) %>% 
+    ggplot2::ggplot(aes(substance_reason, beta_agonists_count)) + 
+    ggplot2::geom_col() + 
+    ggplot2::labs(x = NULL, 
+              y = "Beta agonists count",
+              title = "S3 Beta-2 agonists Sanctions") + 
+    ggplot2::coord_flip()
+ggp_beta_blockers_top5
+```
+
+
+Now we will check the three categories in the `wada_cat` variable. 
+
+```{r ggp_anabolic_cat}
+ggp_anabolic_cat <- UsadaS3Beta2Agonists %>% 
+    dplyr::count(substance_reason, wada_cat, sort = TRUE) %>% 
+    dplyr::ungroup() %>% 
+    dplyr::group_by(wada_cat) %>% 
+    dplyr::top_n(10) %>%
+    dplyr::ungroup() %>% 
+    dplyr::mutate(substance_reason = reorder(substance_reason, n)) %>% 
+    ggplot2::ggplot(aes(substance_reason, n, fill = wada_cat)) + 
+    ggplot2::geom_col(show.legend = FALSE) + 
+    ggplot2::facet_wrap(~wada_cat, 
+                 scales = "free_y", 
+                 nrow = 2,
+                 ncol = 2) + 
+    ggplot2::labs(y = "Number of sanctions/substances", 
+                  x = NULL, 
+                  title = "WADA list categories for banned substances",
+                  subtitle = "Top ten substances/reason in each category") + 
+    ggplot2::coord_flip()
+ggp_anabolic_cat
+```
+
+We can see the `S3 Beta-2 agonists Sanctions` are clearly labeled, and the most common substance is the `higenamine`. 
+
+## Export data 
+
+We'll export this image and move onto M1 Manipulation of blood & blood components.
+
+```{r processed-data}
+base::save.image(file = paste0("data/processed/",
+                               base::noquote(lubridate::today()), 
+                               "-02.3-usada-S3-beta-2-agonists.RData"))
+fs::dir_tree(path = "data/processed", 
+           regexp = base::noquote(lubridate::today()))
+```

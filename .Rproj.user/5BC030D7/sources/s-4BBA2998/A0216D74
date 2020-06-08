@@ -3,15 +3,15 @@
     "path": "~/Dropbox/@incubator/doping-data/02.0-usada-sanction-dates.Rmd",
     "project_path": "02.0-usada-sanction-dates.Rmd",
     "type": "r_markdown",
-    "hash": "0",
+    "hash": "3768349231",
     "contents": "",
     "dirty": false,
     "created": 1591633720778.0,
     "source_on_save": false,
     "relative_order": 2,
     "properties": {
-        "cursorPosition": "54,53",
-        "scrollLine": "53",
+        "cursorPosition": "263,118",
+        "scrollLine": "0",
         "last_setup_crc32": ""
     },
     "folds": "",
@@ -19,7 +19,7 @@
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1591633869516,
+    "last_content_update": 1591634942069,
     "read_only": false,
     "read_only_alternatives": []
 }

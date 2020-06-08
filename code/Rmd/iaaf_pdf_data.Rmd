@@ -1,0 +1,60 @@
+---
+title: "Cleaning IAAF-Anti-Doping data"
+output: html_notebook
+---
+
+
+```{r setup, setup, include=FALSE}
+require(tidyverse)   # Load additional packages here 
+require(magrittr)
+require(dplyr)
+knitr::opts_chunk$set(
+  tidy = FALSE,     # display code as typed
+  size = "small")   # slightly smaller font for code
+```
+
+# Motivation
+
+These data are stored in the .pdf file located here:
+
+```{r file}
+writeLines(fs::dir_ls("data/raw", regexp = ".pdf"))
+```
+
+
+# Load packages 
+
+Install and load the `pdftools` package from CRAN.
+
+```{r pdftools}
+# install.packages("pdftools")
+library(pdftools)
+```
+
+# Import data
+
+Now we can navigate to the .pdf file and import the data using the `pdftools` dataset to clean it up.
+
+```{r load_IaafSanctions}
+# writeLines(fs::dir_ls("data/processed/", regexp = ".csv"))
+IaafSanctions <- readr::read_csv("data/processed/iaaf_sanctions_comb_raw.csv")
+UsadaSanctions <- readr::read_csv("data/processed/UsadaSanctions2018-09-16.csv")
+```
+
+## IAAF Sanctions
+
+These data come from the pdf files 
+
+```{r IaafSanctions}
+IaafSanctions %>% glimpse(78)
+```
+
+```{r UsadaSanctions}
+UsadaSanctions %>% glimpse(78)
+```
+
+# Wrangle data 
+
+# Visualize data 
+
+

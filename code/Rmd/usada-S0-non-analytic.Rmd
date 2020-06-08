@@ -1,0 +1,168 @@
+---
+title: "(Part 2.1) United States Anti-Doping Agency Sanction Data - non-analytic use substances"
+author: "Martin Frigaard"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(hrbrthemes)
+library(extrafont)
+library(knitr)
+library(rmdformats)
+library(knitr)
+library(blogdown)
+library(markdowntemplates)
+library(tidyverse)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  cache = FALSE,
+  prompt = FALSE,
+  tidy = FALSE,
+  fig.width = 10,
+  fig.height = 7,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE,
+  fig.path = "figs/"
+)
+# set theme
+ggplot2::theme_set(theme_ipsum_tw(
+  base_size = 9,
+  strip_text_size = 9,
+  axis_title_size = 11,
+  plot_title_size = 17,
+  subtitle_size = 13,
+  base_family = "Ubuntu",
+  strip_text_family = "TitilliumWeb-Regular",
+  axis_title_family = "TitilliumWeb-Regular",
+  subtitle_family = "TitilliumWeb-Regular",
+  plot_title_family = "JosefinSans-Regular"
+))
+```
+
+**Packages**
+
+```{r packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(magrittr)
+library(skimr)
+library(rlang)
+library(gt)
+library(visdat)
+library(inspectdf)
+library(foreign)
+library(naniar)
+```
+
+# Motivation 
+
+In these scripts (`04`), we will be wrangling the substances from the USADA website. 
+
+## Import data 
+
+In the previous post, I wrangled the data into a new data structure that looks different from the original data on the [USADA website](https://www.usada.org/testing/results/sanctions/). These data are located in the `data/proessed` folder. I can use the `fs::dir_ls()` functions `regexp` argument to find the most recent files. 
+
+```{r usada_sanct_csv_data}
+# check
+processed_data <- fs::dir_ls("data/processed", 
+      regexp = base::noquote(lubridate::today()))
+# choose the csv
+usada_sanct_csv_data <- processed_data[2]
+# import
+UsadaSanctions <- readr::read_csv(file = usada_sanct_csv_data)
+```
+
+Below is the `UsadaSanctions` data frame. This data set has the original dimensions (5 columns, 571 observations). 
+
+```{r UsadaSanctions}
+UsadaSanctions %>% dplyr::glimpse(78)
+```
+
+## The World Anti-Doping Agency’s (WADA) Prohibited List
+
+USADA follows the list of prohibited substances published by the The World Anti-Doping Agency (WADA). The first list of prohibited substances was printed by the International Olympic Committee (IOC) in 1967. In the 1972 Munich Games, athletic testing was introduced. The current list of banned substances can be found on [WADA's website](https://www.usada.org/substances/prohibited-list/). A substance ends up banned when it meets two out of three of the following criteria:
+
+1. It has the potential to enhance sport performance      
+2. It represents an actual or potential health risk to the athlete     
+3. It violates the spirit of sport   
+
+These are all stored in the `substance_reason` variable, but I want them in the `substances` vector.
+
+```{r substances}
+substances <- sort(unique(UsadaSanctions$substance_reason))
+substances %>% head()
+```
+
+## * S0 (Non-approved substances)
+
+This a blanket, catch-all for substances I would consider "obviously prohibited". 
+
+"*any pharmacological substance which is not addressed by any of the subsequent sections of the list and with no current approval by any governmental regulatory health authority for human therapeutic use (e.g. drugs under pre-clinical or clinical development or discontinued, designer drugs, substances approved only for veterinary use) is prohibited at all times.*"
+
+### Non-substance sanctions
+
+We will store these non-substance sanctions in the `non_drug_sanctions`.
+
+```{r non_drug_sanctions}
+non_drug_sanctions <- c(
+  "test evasion",
+  "intravenous infusion",
+  "test refusal",
+  "trafficking and administering prohibitied substances",
+  "violating period of ineligibility",
+  "3 missed tests",
+  "3 whereabouts failures",
+  "failed to appear",
+  "failure to appear",
+  "failure to appear for test",
+  "failure to appear for testing",
+  "manipulation of forms",
+  "missed test violation",
+  "missed tests",
+  "non-analytical",
+  "non-analytical positive",
+  "non-analytical, ghrfs",
+  "non-analytical, possession of prohibited peptides",
+  "non-analytical; possession, trafficking, and administration of prohibited substances",
+  "possession, trafficking, and administration of prohibited substances",
+  "possession, trafficking, and administration of prohibited substances and methods",
+  "reduced sanction",
+  "sanction restarted for violation",
+  "refusal to submit to doping control",
+  "refusal to submit to sample collection",
+  "refusal to test",
+  "refusal/non-analytical positive",
+  "tampering"
+)
+```
+
+```{r str_view_all-glycerol_regex}
+# create regex
+non_drug_sanctions_regex <- paste0("(", stringr::str_c(non_drug_sanctions, 
+                                                   collapse = "|"), ")")
+stringr::str_view_all(string = substances, 
+                      pattern = non_drug_sanctions_regex, 
+                      match = TRUE)
+```
+
+Assign `non_drug_sanctions_regex` to `UsadaSanctions`.
+
+```{r assign-wada_cat}
+UsadaSanctions <- UsadaSanctions %>%
+  dplyr::mutate(
+      # categories from wada list
+    wada_cat =
+      dplyr::case_when(
+        stringr::str_detect(string = substance_reason, 
+                       pattern = non_drug_sanctions_regex) ~ substance_reason,
+        TRUE ~ NA_character_))
+
+UsadaSanctions %>%
+  dplyr::select(
+    athlete,
+    non_drug_sanct,
+    substance_reason) %>%
+  dplyr::filter(!is.na(non_drug_sanct)) %>%
+  dplyr::arrange(desc(non_drug_sanct))
+```

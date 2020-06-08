@@ -1,0 +1,289 @@
+---
+title: "Dope Data Part 3 - non-analytic use substances"
+author: "Martin Frigaard"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(hrbrthemes)
+library(extrafont)
+library(knitr)
+library(rmdformats)
+library(knitr)
+library(blogdown)
+library(markdowntemplates)
+library(tidyverse)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  cache = FALSE,
+  prompt = FALSE,
+  tidy = FALSE,
+  fig.width = 10,
+  fig.height = 7,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE,
+  fig.path = "figs/"
+)
+# set theme
+ggplot2::theme_set(hrbrthemes::theme_ipsum_tw(
+  base_size = 11,
+  strip_text_size = 12,
+  axis_title_size = 13,
+  plot_title_size = 17,
+  subtitle_size = 15,
+  base_family = "Ubuntu",
+  strip_text_family = "TitilliumWeb-Regular",
+  axis_title_family = "TitilliumWeb-Regular",
+  subtitle_family = "TitilliumWeb-Regular",
+  plot_title_family = "JosefinSans-Regular"
+))
+```
+
+**Packages**
+
+```{r packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(magrittr)
+library(skimr)
+library(rlang)
+library(gt)
+library(visdat)
+library(inspectdf)
+library(foreign)
+library(naniar)
+```
+
+# Motivation 
+
+This document outlines the wrangling steps for the non-analytic sanctions in data scraped from the USADA website. 
+
+## Import data 
+
+In the previous post, I wrangled the data into a new data structure that looks different from the original data on the [USADA website](https://www.usada.org/testing/results/sanctions/). These data are located in the `data/proessed` folder. I can use the `fs::dir_ls()` functions `regexp` argument to find the most recent files. 
+
+```{r recent_data_file}
+# get the data files in the processed folder
+recent_data_files <- fs::dir_info("data/processed") %>% 
+  # arrange by 
+  dplyr::arrange(desc(path)) %>% 
+  # grab the most recent 
+  dplyr::slice(1:2) %>% 
+  # get only the path
+  dplyr::select(path) %>% 
+  # convert to vector
+  purrr::as_vector() %>% 
+  # un-name
+  base::unname(force = TRUE)
+recent_data_files
+```
+
+Here we can import the latest sanctions data set. 
+
+```{r import-processed_data}
+# choose the RData
+usada_sanction_dates_rdata <- recent_data_files[2]
+
+# import 02.0-usada-sanction-dates.RData
+base::load(usada_sanction_dates_rdata)
+```
+
+Below is the `UsadaSanctions` data frame. This data set has the original dimensions (5 columns, 580 observations). 
+
+```{r UsadaSanctions}
+UsadaSanctions %>% dplyr::glimpse(78)
+```
+
+## The World Anti-Doping Agency’s (WADA) Prohibited List
+
+USADA follows the list of prohibited substances published by the The World Anti-Doping Agency (WADA). The first list of prohibited substances was printed by the International Olympic Committee (IOC) in 1967. In the 1972 Munich Games, athletic testing was introduced. The current list of banned substances can be found on [WADA's website](https://www.usada.org/substances/prohibited-list/). A substance ends up banned when it meets two out of three of the following criteria:
+
+1. It has the potential to enhance sport performance      
+2. It represents an actual or potential health risk to the athlete     
+3. It violates the spirit of sport   
+
+These are all stored in the `substance_reason` variable, but I want them in the `substances` vector.
+
+```{r substances}
+substances <- sort(unique(UsadaSanctions$substance_reason))
+substances %>% head()
+substances %>% tail()
+```
+
+## * S0 (Non-approved substances)
+
+This a blanket, catch-all for substances I would consider "obviously prohibited". 
+
+"*any pharmacological substance which is not addressed by any of the subsequent sections of the list and with no current approval by any governmental regulatory health authority for human therapeutic use (e.g. drugs under pre-clinical or clinical development or discontinued, designer drugs, substances approved only for veterinary use) is prohibited at all times.*"
+
+### Non-substance sanctions
+
+We will store these non-substance sanctions in the `non_drug_sanctions`.
+
+```{r non_drug_sanctions}
+non_drug_sanctions <- c(
+  "test evasion",
+  "intravenous infusion",
+  "test refusal",
+  "trafficking and administering prohibitied substances",
+  "trafficking and administering prohibited substances",
+  "violating period of ineligibility",
+  "3 missed tests",
+  "3 whereabouts failures",
+  "failed to appear",
+  "failure to appear",
+  "failure to appear for test",
+  "failure to appear for testing",
+  "manipulation of forms",
+  "missed test violation",
+  "missed tests",
+  "non-analytical",
+  "non-analytical positive",
+  "non-analytical, ghrfs",
+  "non-analytical, possession of prohibited peptides",
+  "non-analytical; possession, trafficking, and administration of prohibited substances",
+  "possession, trafficking, and administration of prohibited substances",
+  "possession, trafficking, and administration of prohibited substances and methods",
+  "reduced sanction",
+  "sanction restarted for violation",
+  "refusal to submit to doping control",
+  "refusal to submit to sample collection",
+  "refusal to test",
+  "refusal/non-analytical positive",
+  "tampering"
+)
+```
+
+Our goal is to use this vector to identify the 'non-analytic' substances in the `substance_reason` variable in the `UsadaSanctions` data set. But before we attempt this, we can check to see how many words this will match with `stringr::str_view_all()`.
+
+```{r str_view_all-glycerol_regex}
+# create regex
+non_drug_sanctions_regex <- paste0("(", stringr::str_c(non_drug_sanctions, 
+                                                   collapse = "|"), ")")
+```
+
+The output above shows how the `regex` we created in `non_drug_sanctions_regex` by pasting the terms together, separated only by the pipe (`|`).
+
+```{r head-non_drug_sanctions_regex}
+writeLines(non_drug_sanctions_regex)
+```
+
+```{r str_view_all-non_drug_sanctions_regex}
+stringr::str_view_all(string = substances, 
+                      pattern = non_drug_sanctions_regex, 
+                      match = TRUE)
+```
+
+Assign `non_drug_sanctions_regex` to `UsadaNonAnalytic`.
+
+```{r UsadaNonAnalytic-wada_cat}
+UsadaNonAnalytic <- UsadaSanctions %>%
+  dplyr::mutate(
+      # categories from WADA list
+    wada_cat =
+      dplyr::case_when(
+        # all that match the regex are labeled non-analytic
+        stringr::str_detect(string = substance_reason, 
+                       pattern = non_drug_sanctions_regex) ~ "non-analytic",
+        # all else are NA
+        TRUE ~ NA_character_))
+```
+
+We can check this new variable by using some counting and filtering. 
+
+```{r check-new-variable}
+UsadaNonAnalytic %>% 
+  # tally these up
+  dplyr::count(wada_cat, substance_reason) %>% 
+  # spread the new variable across the columns 
+  tidyr::spread(wada_cat, n) %>% 
+  # now filter the substance/reasons to those in the regex
+  dplyr::filter(stringr::str_detect(string = substance_reason, 
+                       pattern = non_drug_sanctions_regex)) %>%
+  # and arrange them by the most common non-analytic sanctions
+  dplyr::arrange(desc(`non-analytic`)) 
+```
+
+This puts the top non-analytic sanctions in the top of the tibble I can see printed to the screen. But I only get a peak at the top 10, and there are 56 rows in this tallied tibble (see image below).
+
+```{r 03.1-non-analytic-sanctions}
+knitr::include_graphics(path = "figs/03.1-non-analytic-sanctions.png")
+```
+
+Data like these are easier to make sense of in a visualization, so I will create two graphs the display the counts of each non-analytic occurrence. The graph below shows which non-analytic sanctions rank the highest, and based on the output from the tibble above, I've chosen only to include those that occur 3 or more times.
+
+```{r more-than-three-non-analytic}
+UsadaNonAnalytic %>%
+    dplyr::count(substance_reason, sort = TRUE) %>% 
+    dplyr::filter(n >= 3) %>% 
+    dplyr::mutate(substance_reason = reorder(substance_reason, n),
+                  non_analytic_count = n) %>% 
+    # remove the non-missing
+    dplyr::filter(stringr::str_detect(
+        string = substance_reason, 
+        pattern = non_drug_sanctions_regex)) %>% 
+    ggplot2::ggplot(aes(x = substance_reason, 
+                        y = non_analytic_count)) + 
+    ggplot2::geom_col() + 
+    ggplot2::labs(x = "Substance or reason for sanction", 
+          y = "Non analytic count",
+          title = "Non-analytic reasons for sanctions",
+          subtitle = "*sanctions occurring more than three times") + 
+    ggplot2::coord_flip()
+```
+
+It's pretty clear the most common reason for getting a non-analytic sanction was a 'refusal to appear'. I will look at the remaining non-analytic sanctions below by adjusting the graph to include only those that occur less than three times. 
+
+```{r less-than-equal-to-three-non-analytic}
+UsadaNonAnalytic %>%
+    dplyr::count(substance_reason, sort = TRUE) %>% 
+    dplyr::filter(n < 3) %>% 
+    dplyr::mutate(substance_reason = reorder(substance_reason, n),
+                  non_analytic_count = n) %>% 
+    # remove the non-missing
+    dplyr::filter(stringr::str_detect(
+        string = substance_reason, 
+        pattern = non_drug_sanctions_regex)) %>% 
+    ggplot2::ggplot(aes(x = substance_reason, 
+                        y = non_analytic_count)) + 
+    ggplot2::geom_col() + 
+    ggplot2::labs(x = "Substance or reason for sanction", 
+          y = "Non analytic count",
+          title = "Non-analytic reasons for sanctions",
+          subtitle = "*Sanctions occurring less than or equal to three times") + 
+    ggplot2::coord_flip()
+```
+This graph is less informative, but shows us that many of the non-analytic sanctions are very specific. For example, the `non-analytical: tampering, administration (iv), and trafficking (testosterone)` is very similar to `non-analytical: tampering, administration (iv), and complicity (testosterone)`, but with an important distinction. 
+
+First let's examine the case of Alberto Salazar. 
+
+## Alberto Salazar 
+
+In October of 2019, Nike's head coach was banned for four years after a two-year USADA investigation found him guilty of `trafficking` a banned substance (`testosterone`). This comes after a long list of allegations starting in 2017.
+
+```{r trafficking}
+UsadaNonAnalytic %>% 
+  dplyr::filter(substance_reason %in% "non-analytical: tampering, administration (iv), and trafficking (testosterone)")
+```
+
+However, in this same database, we can also find the suspension for Nike's paid endocrinologist (Dr. Jeffrey Brown), who was also involved in the doping probe. The data set does not have any way of indicating these two data points are *not* athletes. 
+
+```{r complicity}
+UsadaNonAnalytic %>% 
+  dplyr::filter(substance_reason %in% "non-analytical: tampering, administration (iv), and complicity (testosterone)")
+```
+
+
+## Export
+
+We'll export this image and move onto anabolic steroids. 
+
+```{r processed-data}
+base::save.image(file = paste0("data/processed/",
+                               base::noquote(lubridate::today()), 
+                               "-03.0-usada-non-analytic.RData"))
+fs::dir_tree(path = "data/processed", 
+           regexp = base::noquote(lubridate::today()))
+```
+
